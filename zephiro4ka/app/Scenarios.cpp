@@ -161,9 +161,10 @@ void Scenarios::Normalize(Scenario& s) {
         s.startNext.clear();
         for (size_t i = 0; i < s.blocks.size(); ++i) {
             auto& b = s.blocks[i];
-            const int place = static_cast<int>(i) + 1;
-            b.x = static_cast<float>(place % 3) * 400.0f;
-            b.y = static_cast<float>(place / 3) * 240.0f;
+            const int place = static_cast<int>(i) + 1, row = place / 3; // змейкой: ряд вправо, следующий — влево
+            const int col = row % 2 == 0 ? place % 3 : 2 - place % 3;
+            b.x = static_cast<float>(col) * 380.0f;
+            b.y = static_cast<float>(row) * 220.0f;
             b.next.clear();
             if (i + 1 < s.blocks.size()) b.next.push_back(s.blocks[i + 1].id);
         }

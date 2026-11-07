@@ -67,6 +67,7 @@ namespace {
         if (cmd == "mouse") { float x = 0, y = 0; in >> x >> y; io.AddMousePosEvent(x, y); g_mouse = ImVec2(x, y); g_holdMouse = true; return; }
         if (cmd == "down") { io.AddMouseButtonEvent(0, true); return; }   // зажать левую кнопку
         if (cmd == "up") { io.AddMouseButtonEvent(0, false); return; }    // отпустить
+        if (cmd == "rclick") { io.AddMouseButtonEvent(1, true); io.AddMouseButtonEvent(1, false); return; } // правый клик
         if (cmd == "scroll") { float n = 0; in >> n; io.AddMouseWheelEvent(0, -n); return; }
         if (cmd == "ini") {
             std::string key, value;

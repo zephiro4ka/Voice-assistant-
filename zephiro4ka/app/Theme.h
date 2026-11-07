@@ -40,6 +40,7 @@ namespace Theme {
     Color Accent();                               // любимый цвет — кнопки, переключатели, выбор
     Color Background(int index);                  // 0 — верх фона, 1 — низ
     ImU32 Surface(float alpha = 1.0f);            // цвет панелей (со «стеклом» — прозрачнее)
+    ImU32 SurfaceSolid();                          // то же, но всегда плотно — для всплывающих меню (стекло не просвечивает)
     bool ButtonPlates();                          // подложка под кнопками окна
 
     struct LookColors { Color top, bottom, surface; };

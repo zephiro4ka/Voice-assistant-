@@ -193,5 +193,6 @@ void Theme::Apply(const Settings& s) {
 
 Theme::Color Theme::Accent() { return g_accent; }
 Theme::Color Theme::Background(int index) { return index == 0 ? g_look.top : g_look.bottom; }
+ImU32 Theme::SurfaceSolid() { return g_look.surface.WithAlpha(1.0f); }
 ImU32 Theme::Surface(float alpha) { return g_look.surface.WithAlpha(alpha * (g_glass ? 0.82f : 1.0f)); }
 bool Theme::ButtonPlates() { return g_plates; }
