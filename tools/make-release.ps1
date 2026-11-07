@@ -11,8 +11,19 @@ $dist = Join-Path $root 'dist\Anya'
 if (-not $NoBuild) {
     $msbuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\amd64\MSBuild.exe' | Select-Object -First 1
     if (-not $msbuild) { throw 'Не нашла MSBuild — установи Visual Studio с «Разработкой классических приложений на C++»' }
+    # запущенный Anya.exe не перезаписать — закрываем его на время сборки и потом запускаем снова
+    $exe = Join-Path $release 'Anya.exe'
+    $running = Get-Process Anya -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }
+    if ($running) {
+        Write-Host 'Закрываю запущенную Аню на время сборки…'
+        $running | Stop-Process -Force
+        $running | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+    }
     & $msbuild (Join-Path $project 'zephiro4ka.vcxproj') /p:Configuration=Release /p:Platform=x64 /m /v:m /nologo
-    if ($LASTEXITCODE) { throw 'Сборка не удалась' }
+    $built = $LASTEXITCODE -eq 0
+    if ($running) { Start-Process $exe -WorkingDirectory $release }
+    if (-not $built) { throw 'Сборка не удалась' }
 }
 
 if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
