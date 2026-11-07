@@ -1,0 +1,555 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Аня">
+      <UniqueIdentifier>{628c85cf-e54a-4f96-abf9-a06191b7eeec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Исходные файлы">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Файлы заголовков">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Файлы ресурсов">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="framework.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="zephiro4ka.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imconfig.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imgui.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imgui_impl_dx11.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imgui_impl_win32.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imgui_internal.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imstb_rectpack.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imstb_textedit.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGui\imstb_truetype.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="whisper.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="vec.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="unary-ops.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="traits.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="simd-mappings.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="simd-gemm.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="repack.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="quants.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ops.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="miniaudio.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="hbm.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="gguf.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-threading.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-quants.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="arch-fallback.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="binary-ops.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="common.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-alloc.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-backend.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-opt.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-impl.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-feats.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-cpu-impl.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-cpu.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-cpp.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-common.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-backend-impl.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-backend-dl.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="whisper-arch.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="ggml-version.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="zephiro4ka.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_demo.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_draw.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_impl_dx11.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_impl_win32.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_tables.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGui\imgui_widgets.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="whisper.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="vec.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="unary-ops.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="traits.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="repack.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="quants.c">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ops.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="hbm.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="gguf.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ggml-threading.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ggml-quants.c">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="binary-ops.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ggml.c">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ggml.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ggml-alloc.c">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ggml-backend.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ggml-opt.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ggml-cpu.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ggml-cpu.c">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ggml-backend-reg.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="ggml-backend-meta.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Version.rc">
+      <Filter>Файлы ресурсов</Filter>
+    </ResourceCompile>
+    <ResourceCompile Include="zephiro4ka.rc">
+      <Filter>Файлы ресурсов</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="small.ico">
+      <Filter>Файлы ресурсов</Filter>
+    </Image>
+    <Image Include="zephiro4ka.ico">
+      <Filter>Файлы ресурсов</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="imgui.ini" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="app\Brain.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Ears.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Graphics.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Json.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\LocalAi.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Settings.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\State.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\TextUtils.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Theme.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Ui.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Visuals.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Voice.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Widgets.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Brain.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Ears.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Graphics.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Json.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\LocalAi.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Platform.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Settings.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\State.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\TextUtils.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Theme.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Ui.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Visuals.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Voice.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Widgets.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Launcher.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Launcher.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Chatter.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Chatter.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Input.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Input.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Skills.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Skills.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\AudioOut.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\NeuralVoice.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="third_party\supertonic\helper.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\AudioOut.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\NeuralVoice.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="third_party\supertonic\helper.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Log.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Log.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Messenger.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Messenger.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Fuzzy.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Fuzzy.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\ScreenLinks.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\ScreenLinks.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Weather.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Weather.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Browser.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Browser.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Pc.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Pc.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Com.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\BodySounds.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\BodySounds.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Sidecar.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Sidecar.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Http.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Http.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\SileroVoice.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\SileroVoice.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\WeatherWidget.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\WeatherWidget.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\SettingsPage.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\SettingsPage.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\DevProbe.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\DevProbe.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\SystemMonitor.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\SystemMonitor.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\MediaNow.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\MediaNow.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\HomeWidgets.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\HomeWidgets.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Telegram.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Telegram.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\PowerMode.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\PowerMode.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Screen.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Screen.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\DiscordRpc.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\DiscordRpc.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Autostart.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Autostart.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Scenarios.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Scenarios.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\ScenariosPage.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\ScenariosPage.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Wallpaper.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Wallpaper.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\Toast.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Toast.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\ProcessMonitor.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\ProcessMonitor.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\ProcessesPage.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\ProcessesPage.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

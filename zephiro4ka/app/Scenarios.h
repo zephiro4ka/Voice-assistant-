@@ -1,0 +1,47 @@
+#pragma once
+// Сценарии: «Аня, уютный вечер» → цепочка блоков: открыть кино на втором мониторе, запустить игру, убавить звук…
+// Каждый сценарий = фраза («Слушать») + блоки действий по порядку + «Конец». Хранятся в scenarios.json рядом с Аней.
+
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace Scenarios {
+    enum class Step {
+        Launch,     // запустить программу (text — название, как в «Пуске»)
+        OpenLink,   // открыть ссылку в браузере (text — адрес)
+        Place,      // поставить окно: text — программа (пусто — из прошлого блока), monitor, position
+        Volume,     // громкость number %
+        Media,      // number: 0 — пауза/плей, 1 — следующий трек
+        Wait,       // подождать number секунд
+        Say,        // сказать text вслух
+        kCount
+    };
+    // Положение окна для блока Place
+    enum class Position { Maximize = 0, LeftHalf = 1, RightHalf = 2, Center = 3, FullScreen = 4 /* развернуть и F11 — для видео в браузере */ };
+
+    struct Block {
+        Step step = Step::Launch;
+        std::string text;
+        int monitor = 1;   // 1 — основной (слева направо по порядку)
+        int position = 0;
+        int number = 0;
+    };
+
+    struct Scenario {
+        std::string name = "Новый сценарий";
+        std::string phrase;        // что сказать после «Аня»
+        bool enabled = true;
+        std::vector<Block> blocks;
+    };
+
+    std::vector<Scenario> Load();
+    void Save(const std::vector<Scenario>& scenarios);
+
+    // Фраза совпала с каким-то сценарием — запустить его в фоне и вернуть, что ответить
+    std::optional<std::string> TryRun(const std::string& command);
+    void Run(const Scenario& scenario); // в фоне
+
+    const char* StepName(Step step);
+    int MonitorCount();
+}

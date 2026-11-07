@@ -1,0 +1,1 @@
+llama.cpp b11765 (2026-10-20), официальная сборка win-vulkan-x64: https://github.com/ggml-org/llama.cpp/releases/tag/b11765

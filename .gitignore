@@ -1,0 +1,31 @@
+# сборка Visual Studio
+.vs/
+x64/
+**/x64/
+*.user
+*.obj
+*.pdb
+*.ipdb
+*.iobj
+*.tlog
+*.log
+
+# личные данные — НИКОГДА не выкладывать (токен бота, ID, контакты, сценарии)
+anya.ini
+scenarios.json
+devprobe.txt
+imgui.ini
+zephiro4ka/imgui.ini
+
+# большие файлы — скачиваются отдельно (см. README)
+models/
+*.gguf
+*.bin
+*.pt
+*.onnx
+zephiro4ka/third_party/silero/venv/
+zephiro4ka/third_party/llama.cpp/*.exe
+zephiro4ka/third_party/llama.cpp/*.dll
+zephiro4ka/third_party/onnxruntime/lib/
+dist/
+.claude/

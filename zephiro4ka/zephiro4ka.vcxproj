@@ -1,0 +1,385 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{c5d588fa-d46c-4b3a-a934-352c8a0cf2de}</ProjectGuid>
+    <RootNamespace>zephiro4ka</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <DisableSpecificWarnings>4996</DisableSpecificWarnings>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <DisableSpecificWarnings>4996</DisableSpecificWarnings>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_SILENCE_CXX20_U8PATH_DEPRECATION_WARNING;GGML_CPU_GENERIC;GGML_USE_CPU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <DisableSpecificWarnings>4996</DisableSpecificWarnings>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir)third_party\onnxruntime\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)third_party\onnxruntime\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>onnxruntime.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <PostBuildEvent>
+      <Command>xcopy /y /d /q "$(ProjectDir)third_party\onnxruntime\lib\*.dll" "$(OutDir)"
+xcopy /y /d /q /i "$(ProjectDir)third_party\llama.cpp\*" "$(OutDir)llama.cpp\"</Command>
+      <Message>Копирую ONNX Runtime и движок нейросети рядом с exe</Message>
+    </PostBuildEvent>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_SILENCE_CXX20_U8PATH_DEPRECATION_WARNING;GGML_CPU_GENERIC;GGML_USE_CPU;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <DisableSpecificWarnings>4996</DisableSpecificWarnings>
+      <Optimization>MaxSpeed</Optimization>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <SDLCheck>false</SDLCheck>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(ProjectDir)third_party\onnxruntime\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)third_party\onnxruntime\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>onnxruntime.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <PostBuildEvent>
+      <Command>xcopy /y /d /q "$(ProjectDir)third_party\onnxruntime\lib\*.dll" "$(OutDir)"
+xcopy /y /d /q /i "$(ProjectDir)third_party\llama.cpp\*" "$(OutDir)llama.cpp\"</Command>
+      <Message>Копирую ONNX Runtime и движок нейросети рядом с exe</Message>
+    </PostBuildEvent>
+    <Manifest>
+      <EnableSegmentHeap>true</EnableSegmentHeap>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="arch-fallback.h" />
+    <ClInclude Include="binary-ops.h" />
+    <ClInclude Include="common.h" />
+    <ClInclude Include="framework.h" />
+    <ClInclude Include="ggml-alloc.h" />
+    <ClInclude Include="ggml-backend-dl.h" />
+    <ClInclude Include="ggml-backend-impl.h" />
+    <ClInclude Include="ggml-backend.h" />
+    <ClInclude Include="ggml-common.h" />
+    <ClInclude Include="ggml-cpp.h" />
+    <ClInclude Include="ggml-cpu-impl.h" />
+    <ClInclude Include="ggml-cpu.h" />
+    <ClInclude Include="ggml-feats.h" />
+    <ClInclude Include="ggml-impl.h" />
+    <ClInclude Include="ggml-opt.h" />
+    <ClInclude Include="ggml-quants.h" />
+    <ClInclude Include="ggml-threading.h" />
+    <ClInclude Include="ggml-version.h" />
+    <ClInclude Include="ggml.h" />
+    <ClInclude Include="gguf.h" />
+    <ClInclude Include="hbm.h" />
+    <ClInclude Include="ImGui\imconfig.h" />
+    <ClInclude Include="ImGui\imgui.h" />
+    <ClInclude Include="ImGui\imgui_impl_dx11.h" />
+    <ClInclude Include="ImGui\imgui_impl_win32.h" />
+    <ClInclude Include="ImGui\imgui_internal.h" />
+    <ClInclude Include="ImGui\imstb_rectpack.h" />
+    <ClInclude Include="ImGui\imstb_textedit.h" />
+    <ClInclude Include="ImGui\imstb_truetype.h" />
+    <ClInclude Include="miniaudio.h" />
+    <ClInclude Include="ops.h" />
+    <ClInclude Include="quants.h" />
+    <ClInclude Include="repack.h" />
+    <ClInclude Include="Resource.h" />
+    <ClInclude Include="simd-gemm.h" />
+    <ClInclude Include="simd-mappings.h" />
+    <ClInclude Include="targetver.h" />
+    <ClInclude Include="traits.h" />
+    <ClInclude Include="unary-ops.h" />
+    <ClInclude Include="vec.h" />
+    <ClInclude Include="whisper-arch.h" />
+    <ClInclude Include="whisper.h" />
+    <ClInclude Include="zephiro4ka.h" />
+    <ClInclude Include="app\Brain.h" />
+    <ClInclude Include="app\Ears.h" />
+    <ClInclude Include="app\Graphics.h" />
+    <ClInclude Include="app\Chatter.h" />
+    <ClInclude Include="app\Input.h" />
+    <ClInclude Include="app\Skills.h" />
+    <ClInclude Include="app\AudioOut.h" />
+    <ClInclude Include="app\NeuralVoice.h" />
+    <ClInclude Include="third_party\supertonic\helper.h" />
+    <ClInclude Include="app\Log.h" />
+    <ClInclude Include="app\Messenger.h" />
+    <ClInclude Include="app\Fuzzy.h" />
+    <ClInclude Include="app\ScreenLinks.h" />
+    <ClInclude Include="app\SettingsPage.h" />
+    <ClInclude Include="app\DevProbe.h" />
+    <ClInclude Include="app\SystemMonitor.h" />
+    <ClInclude Include="app\MediaNow.h" />
+    <ClInclude Include="app\HomeWidgets.h" />
+    <ClInclude Include="app\Telegram.h" />
+    <ClInclude Include="app\PowerMode.h" />
+    <ClInclude Include="app\Screen.h" />
+    <ClInclude Include="app\DiscordRpc.h" />
+    <ClInclude Include="app\Autostart.h" />
+    <ClInclude Include="app\Scenarios.h" />
+    <ClInclude Include="app\SetupWizard.h" />
+    <ClInclude Include="app\Uninstall.h" />
+    <ClInclude Include="app\HomeLayout.h" />
+    <ClInclude Include="app\ScenarioMaker.h" />
+    <ClInclude Include="app\ScenariosPage.h" />
+    <ClInclude Include="app\Wallpaper.h" />
+    <ClInclude Include="app\Toast.h" />
+    <ClInclude Include="app\ProcessMonitor.h" />
+    <ClInclude Include="app\ProcessesPage.h" />
+    <ClInclude Include="app\Weather.h" />
+    <ClInclude Include="app\WeatherWidget.h" />
+    <ClInclude Include="app\Browser.h" />
+    <ClInclude Include="app\Pc.h" />
+    <ClInclude Include="app\Com.h" />
+    <ClInclude Include="app\BodySounds.h" />
+    <ClInclude Include="app\Sidecar.h" />
+    <ClInclude Include="app\Http.h" />
+    <ClInclude Include="app\SileroVoice.h" />
+    <ClInclude Include="app\Json.h" />
+    <ClInclude Include="app\Launcher.h" />
+    <ClInclude Include="app\LocalAi.h" />
+    <ClInclude Include="app\Platform.h" />
+    <ClInclude Include="app\Settings.h" />
+    <ClInclude Include="app\State.h" />
+    <ClInclude Include="app\TextUtils.h" />
+    <ClInclude Include="app\Theme.h" />
+    <ClInclude Include="app\Ui.h" />
+    <ClInclude Include="app\Visuals.h" />
+    <ClInclude Include="app\Voice.h" />
+    <ClInclude Include="app\Widgets.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="binary-ops.cpp" />
+    <ClCompile Include="ggml-alloc.c" />
+    <ClCompile Include="ggml-backend-meta.cpp" />
+    <ClCompile Include="ggml-backend-reg.cpp" />
+    <ClCompile Include="ggml-backend.cpp" />
+    <ClCompile Include="ggml-cpu.c">
+      <ObjectFileName>$(IntDir)ggml-cpu-c.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="ggml-cpu.cpp">
+      <ObjectFileName>$(IntDir)ggml-cpu-cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="ggml-opt.cpp" />
+    <ClCompile Include="ggml-quants.c" />
+    <ClCompile Include="ggml-threading.cpp" />
+    <ClCompile Include="ggml.c">
+      <ObjectFileName>$(IntDir)ggml-c.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="ggml.cpp">
+      <ObjectFileName>$(IntDir)ggml-cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="gguf.cpp" />
+    <ClCompile Include="hbm.cpp" />
+    <ClCompile Include="ImGui\imgui.cpp" />
+    <ClCompile Include="ImGui\imgui_demo.cpp" />
+    <ClCompile Include="ImGui\imgui_draw.cpp" />
+    <ClCompile Include="ImGui\imgui_impl_dx11.cpp" />
+    <ClCompile Include="ImGui\imgui_impl_win32.cpp" />
+    <ClCompile Include="ImGui\imgui_tables.cpp" />
+    <ClCompile Include="ImGui\imgui_widgets.cpp" />
+    <ClCompile Include="ops.cpp" />
+    <ClCompile Include="quants.c" />
+    <ClCompile Include="repack.cpp" />
+    <ClCompile Include="traits.cpp" />
+    <ClCompile Include="unary-ops.cpp" />
+    <ClCompile Include="vec.cpp" />
+    <ClCompile Include="whisper.cpp" />
+    <ClCompile Include="zephiro4ka.cpp" />
+    <ClCompile Include="app\Brain.cpp" />
+    <ClCompile Include="app\Ears.cpp" />
+    <ClCompile Include="app\Graphics.cpp" />
+    <ClCompile Include="app\Chatter.cpp" />
+    <ClCompile Include="app\Input.cpp" />
+    <ClCompile Include="app\Skills.cpp" />
+    <ClCompile Include="app\AudioOut.cpp" />
+    <ClCompile Include="app\NeuralVoice.cpp" />
+    <ClCompile Include="third_party\supertonic\helper.cpp">
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+    </ClCompile>
+    <ClCompile Include="app\Log.cpp" />
+    <ClCompile Include="app\Messenger.cpp" />
+    <ClCompile Include="app\Fuzzy.cpp" />
+    <ClCompile Include="app\ScreenLinks.cpp" />
+    <ClCompile Include="app\SettingsPage.cpp" />
+    <ClCompile Include="app\DevProbe.cpp" />
+    <ClCompile Include="app\SystemMonitor.cpp" />
+    <ClCompile Include="app\MediaNow.cpp" />
+    <ClCompile Include="app\HomeWidgets.cpp" />
+    <ClCompile Include="app\Telegram.cpp" />
+    <ClCompile Include="app\PowerMode.cpp" />
+    <ClCompile Include="app\Screen.cpp" />
+    <ClCompile Include="app\DiscordRpc.cpp" />
+    <ClCompile Include="app\Autostart.cpp" />
+    <ClCompile Include="app\Scenarios.cpp" />
+    <ClCompile Include="app\SetupWizard.cpp" />
+    <ClCompile Include="app\Uninstall.cpp" />
+    <ClCompile Include="app\HomeLayout.cpp" />
+    <ClCompile Include="app\ScenarioMaker.cpp" />
+    <ClCompile Include="app\ScenariosPage.cpp" />
+    <ClCompile Include="app\Wallpaper.cpp" />
+    <ClCompile Include="app\Toast.cpp" />
+    <ClCompile Include="app\ProcessMonitor.cpp" />
+    <ClCompile Include="app\ProcessesPage.cpp" />
+    <ClCompile Include="app\Weather.cpp" />
+    <ClCompile Include="app\WeatherWidget.cpp" />
+    <ClCompile Include="app\Browser.cpp" />
+    <ClCompile Include="app\Pc.cpp" />
+    <ClCompile Include="app\BodySounds.cpp" />
+    <ClCompile Include="app\Sidecar.cpp" />
+    <ClCompile Include="app\Http.cpp" />
+    <ClCompile Include="app\SileroVoice.cpp" />
+    <ClCompile Include="app\Json.cpp" />
+    <ClCompile Include="app\Launcher.cpp" />
+    <ClCompile Include="app\LocalAi.cpp" />
+    <ClCompile Include="app\Settings.cpp" />
+    <ClCompile Include="app\State.cpp" />
+    <ClCompile Include="app\TextUtils.cpp" />
+    <ClCompile Include="app\Theme.cpp" />
+    <ClCompile Include="app\Ui.cpp" />
+    <ClCompile Include="app\Visuals.cpp" />
+    <ClCompile Include="app\Voice.cpp" />
+    <ClCompile Include="app\Widgets.cpp" />
+    <ClCompile Include="compat.cpp" />
+    <ClCompile Include="aneforge\whisper-aneforge.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="zephiro4ka.rc" />
+    <ResourceCompile Include="Version.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="small.ico" />
+    <Image Include="zephiro4ka.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="imgui.ini" />
+  </ItemGroup>
+  <PropertyGroup>
+    <!-- имя exe: в диспетчере задач и на панели задач — «Аня» -->
+    <TargetName>Anya</TargetName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
