@@ -21,6 +21,8 @@
 #include "Widgets.h"
 
 #include <algorithm>
+#include <cfloat>
+#include <vector>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -134,45 +136,143 @@ namespace {
         Widgets::Text(dl, Theme::semibold, ImVec2(led.x + Px(10), led.y - Theme::semibold->LegacySize * 0.55f), Theme::kInkMuted, label);
     }
 
-    // Меню по центру: Главная · Разговор · Настройки, выбранная вкладка подсвечена и подсветка плавно переезжает
+    // ---------------------------------------------------------------- меню в шапке: порядок, названия, что показывать
+    // [layout] nav_order=0,1,2,3 · nav_label_N · nav_hide_N · nav_style (0 — значок и текст, 1 — только значки, 2 — только текст)
+    struct NavTab { Icon icon; const char* label; };
+    const NavTab kNavTabs[] = { { Icon::Home, "Главная" }, { Icon::Flow, "Сценарии" }, { Icon::Grid, "Процессы" }, { Icon::Gear, "Настройки" } };
+    constexpr int kNavCount = 4;
+    struct NavConfig { int order[kNavCount] = { 0, 1, 2, 3 }; bool hidden[kNavCount] = {}; std::string labels[kNavCount]; int style = 0; char edit[64] = ""; bool loaded = false; };
+    NavConfig g_nav;
+
+    void LoadNav() {
+        if (g_nav.loaded) return;
+        g_nav.loaded = true;
+        const std::string order = Config::Value("layout", "nav_order", "0,1,2,3");
+        int used[kNavCount] = {}, n = 0;
+        for (size_t i = 0; i < order.size() && n < kNavCount; ++i)
+            if (order[i] >= '0' && order[i] < '0' + kNavCount && !used[order[i] - '0']) { used[order[i] - '0'] = 1; g_nav.order[n++] = order[i] - '0'; }
+        for (int t = 0; t < kNavCount && n < kNavCount; ++t) if (!used[t]) g_nav.order[n++] = t; // забытые — в конец
+        for (int t = 0; t < kNavCount; ++t) {
+            g_nav.labels[t] = Config::Value("layout", ("nav_label_" + std::to_string(t)).c_str(), "");
+            g_nav.hidden[t] = t != 3 && Config::Value("layout", ("nav_hide_" + std::to_string(t)).c_str(), "0") == "1"; // настройки не прячем
+        }
+        g_nav.style = std::clamp(std::atoi(Config::Value("layout", "nav_style", "0").c_str()), 0, 2);
+    }
+
+    void SaveNav() {
+        std::string order;
+        for (int i = 0; i < kNavCount; ++i) order += (i ? "," : "") + std::to_string(g_nav.order[i]);
+        Config::SetValue("layout", "nav_order", order);
+        for (int t = 0; t < kNavCount; ++t) {
+            Config::SetValue("layout", ("nav_label_" + std::to_string(t)).c_str(), g_nav.labels[t]);
+            Config::SetValue("layout", ("nav_hide_" + std::to_string(t)).c_str(), g_nav.hidden[t] ? "1" : "0");
+        }
+        Config::SetValue("layout", "nav_style", std::to_string(g_nav.style));
+    }
+
+    std::string NavLabel(int tab) { return g_nav.labels[tab].empty() ? kNavTabs[tab].label : g_nav.labels[tab]; }
+
+    std::vector<int> g_navVisible; // какие вкладки нарисованы (номера вкладок по порядку) — для правки
+
+    void MoveNavTab(int from, int to) { // from/to — места среди видимых
+        if (from < 0 || to < 0 || from >= static_cast<int>(g_navVisible.size()) || to >= static_cast<int>(g_navVisible.size())) return;
+        std::vector<int> order(g_nav.order, g_nav.order + kNavCount);
+        const int tab = g_navVisible[from], other = g_navVisible[to];
+        order.erase(std::find(order.begin(), order.end(), tab));
+        auto at = std::find(order.begin(), order.end(), other);
+        order.insert(to > from ? at + 1 : at, tab);
+        std::copy(order.begin(), order.end(), g_nav.order);
+        SaveNav();
+    }
+
+    void NavTabMenu(int place) {
+        if (place < 0 || place >= static_cast<int>(g_navVisible.size())) return;
+        const int tab = g_navVisible[place];
+        if (ImGui::IsWindowAppearing()) snprintf(g_nav.edit, sizeof(g_nav.edit), "%s", NavLabel(tab).c_str());
+        ImGui::TextDisabled("название вкладки");
+        ImGui::SetNextItemWidth(Px(200));
+        if (ImGui::InputTextWithHint("##navLabel", kNavTabs[tab].label, g_nav.edit, sizeof(g_nav.edit))) {
+            const std::string text = Text::Trim(g_nav.edit);
+            g_nav.labels[tab] = text == kNavTabs[tab].label ? std::string() : text;
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit()) SaveNav();
+        if (tab != 3) {
+            bool shown = !g_nav.hidden[tab];
+            if (ImGui::Checkbox("показывать вкладку", &shown)) { g_nav.hidden[tab] = !shown; SaveNav(); ImGui::CloseCurrentPopup(); }
+        } else {
+            ImGui::TextDisabled("«Настройки» не прячется — иначе не выключить правку");
+        }
+        ImGui::Separator();
+        ImGui::TextDisabled("все вкладки");
+        static const char* kStyles[] = { "значок и текст", "только значки", "только текст" };
+        for (int s = 0; s < 3; ++s)
+            if (ImGui::RadioButton(kStyles[s], g_nav.style == s)) { g_nav.style = s; SaveNav(); }
+        ImGui::Separator();
+        if (ImGui::Button("вернуть меню как было")) {
+            for (int t = 0; t < kNavCount; ++t) { g_nav.order[t] = t; g_nav.hidden[t] = false; g_nav.labels[t].clear(); }
+            g_nav.style = 0;
+            SaveNav();
+            ImGui::CloseCurrentPopup();
+        }
+    }
+
+    // Меню по центру: Главная · Сценарии · Процессы · Настройки, выбранная вкладка подсвечена и подсветка плавно переезжает.
+    // В «Полной кастомизации» остров двигается и растягивается, вкладки переставляются и переименовываются.
     void DrawNavigation(ImDrawList* dl, const Layout& L, float dt) {
-        struct Tab { Icon icon; const char* label; };
-        static const Tab kTabs[] = { { Icon::Home, "Главная" }, { Icon::Flow, "Сценарии" }, { Icon::Grid, "Процессы" }, { Icon::Gear, "Настройки" } };
-        constexpr int kCount = IM_ARRAYSIZE(kTabs);
-        const int selected = SettingsPage::IsOpen() ? 3 : ProcessesPage::IsOpen() ? 2 : ScenariosPage::IsOpen() ? 1 : 0;
+        LoadNav();
+        const int open = SettingsPage::IsOpen() ? 3 : ProcessesPage::IsOpen() ? 2 : ScenariosPage::IsOpen() ? 1 : 0;
+        struct Tab { Icon icon; std::string label; int id; };
+        std::vector<Tab> tabs;
+        for (int i = 0; i < kNavCount; ++i) {
+            const int id = g_nav.order[i];
+            if (!g_nav.hidden[id] || id == open) tabs.push_back({ kNavTabs[id].icon, NavLabel(id), id });
+        }
+        g_navVisible.clear();
+        for (const Tab& t : tabs) g_navVisible.push_back(t.id);
+        const int kCount = static_cast<int>(tabs.size());
+        int selected = 0;
+        for (int i = 0; i < kCount; ++i) if (tabs[i].id == open) selected = i;
+        const float scale = HomeLayout::Scale("nav");
+        const ImVec2 shift = HomeLayout::Shift("nav", L.screen);
+        const float fontSize = Theme::semibold->LegacySize * scale;
+        auto textWidth = [&](const std::string& t) { return Theme::semibold->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, t.c_str()).x; };
 
         // узкое окно — только значки
-        const float iconSize = Px(14), gap = Px(8), padX = Px(14), height = Px(34);
+        const float iconSize = Px(14) * scale, gap = Px(8) * scale, padX = Px(14) * scale, height = Px(34) * scale;
+        const bool showIcon = g_nav.style != 2, showText = g_nav.style != 1;
+        auto tabWidth = [&](const Tab& t, bool compact) {
+            if (compact || !showText) return height;
+            return padX * 2 + (showIcon ? iconSize + gap : 0.0f) + textWidth(t.label);
+        };
         float full = 0.0f;
-        for (const Tab& t : kTabs) full += padX * 2 + iconSize + gap + Widgets::TextSize(Theme::semibold, t.label).x;
-        const bool compact = full + Px(8) > L.screen.x - Px(520);
+        for (const Tab& t : tabs) full += tabWidth(t, false);
+        const bool compact = showText && showIcon && full + Px(8) > L.screen.x - Px(520) && !HomeLayout::Moved("nav");
 
-        float widths[kCount];
-        float total = Px(8);
-        for (int i = 0; i < kCount; ++i) {
-            widths[i] = compact ? height : padX * 2 + iconSize + gap + Widgets::TextSize(Theme::semibold, kTabs[i].label).x;
-            total += widths[i];
-        }
-        const ImVec2 pos(std::round(L.screen.x * 0.5f - total * 0.5f), std::round((g_titleHeight - height - Px(8)) * 0.5f + Px(4)));
+        std::vector<float> widths(kCount);
+        float total = Px(8) * scale;
+        for (int i = 0; i < kCount; ++i) { widths[i] = tabWidth(tabs[i], compact); total += widths[i]; }
+        const ImVec2 pos(std::round(L.screen.x * 0.5f - total * 0.5f + shift.x), std::round((g_titleHeight - height - Px(8) * scale) * 0.5f + Px(4) + shift.y));
         g_navMin = pos;
-        g_navMax = ImVec2(pos.x + total, pos.y + height + Px(8));
-        dl->AddRectFilled(g_navMin, g_navMax, Theme::Surface(0.6f), (height + Px(8)) * 0.5f);
-        dl->AddRect(g_navMin, g_navMax, IM_COL32(255, 255, 255, 14), (height + Px(8)) * 0.5f);
+        g_navMax = ImVec2(pos.x + total, pos.y + height + Px(8) * scale);
+        dl->AddRectFilled(g_navMin, g_navMax, Theme::Surface(0.6f), (g_navMax.y - g_navMin.y) * 0.5f);
+        dl->AddRect(g_navMin, g_navMax, IM_COL32(255, 255, 255, 14), (g_navMax.y - g_navMin.y) * 0.5f);
+        HomeLayout::Report("nav", "меню", ImVec2(g_navMin.x - Px(6), g_navMin.y - Px(4)), ImVec2(g_navMax.x + Px(6), g_navMax.y + Px(4)), true);
 
-        float x = pos.x + Px(4);
+        float x = pos.x + Px(4) * scale;
         float selectedX = x;
         for (int i = 0; i < selected; ++i) selectedX += widths[i];
         if (g_navX < 0) g_navX = selectedX, g_navW = widths[selected];
         const float k = std::min(1.0f, dt * 14.0f);
         g_navX += (selectedX - g_navX) * k;
         g_navW += (widths[selected] - g_navW) * k;
-        const ImVec2 hiMin(g_navX, pos.y + Px(4)), hiMax(g_navX + g_navW, pos.y + Px(4) + height);
+        const ImVec2 hiMin(g_navX, pos.y + Px(4) * scale), hiMax(g_navX + g_navW, pos.y + Px(4) * scale + height);
         dl->AddRectFilled(hiMin, hiMax, IM_COL32(255, 255, 255, 18), height * 0.5f);
         dl->AddRect(hiMin, hiMax, IM_COL32(255, 255, 255, 22), height * 0.5f);
 
-        static float s_hover[kCount] = {};
+        static float s_hover[kNavCount] = {};
         for (int i = 0; i < kCount; ++i) {
-            const ImVec2 a(x, pos.y + Px(4)), b(x + widths[i], pos.y + Px(4) + height);
+            const ImVec2 a(x, pos.y + Px(4) * scale), b(x + widths[i], pos.y + Px(4) * scale + height);
+            HomeLayout::ReportChild("nav", i, a, b, { MoveNavTab, NavTabMenu });
             ImGui::SetCursorScreenPos(a);
             ImGui::PushID(i);
             const bool clicked = ImGui::InvisibleButton("##tab", ImVec2(widths[i], height));
@@ -180,26 +280,30 @@ namespace {
             ImGui::PopID();
             s_hover[i] += ((hovered ? 1.0f : 0.0f) - s_hover[i]) * std::min(1.0f, dt * 16.0f);
             if (s_hover[i] > 0.01f && i != selected) dl->AddRectFilled(a, b, IM_COL32(255, 255, 255, static_cast<int>(14 * s_hover[i])), height * 0.5f);
-            if (compact && hovered) ImGui::SetTooltip("%s", kTabs[i].label);
+            if ((compact || !showText) && hovered) ImGui::SetTooltip("%s", tabs[i].label.c_str());
 
             const bool on = i == selected;
             const ImU32 color = on ? Theme::kInk : (s_hover[i] > 0.5f ? Theme::kInkSoft : Theme::kInkMuted);
-            const float cx = compact ? (a.x + b.x) * 0.5f : a.x + padX + iconSize * 0.5f;
-            Widgets::DrawIcon(dl, kTabs[i].icon, ImVec2(cx, (a.y + b.y) * 0.5f), iconSize, color);
-            if (!compact)
-                Widgets::Text(dl, Theme::semibold, ImVec2(a.x + padX + iconSize + gap, (a.y + b.y) * 0.5f - Theme::semibold->LegacySize * 0.55f),
-                    color, kTabs[i].label);
+            const bool iconOnly = compact || !showText;
+            if (showIcon || iconOnly) {
+                const float cx = iconOnly ? (a.x + b.x) * 0.5f : a.x + padX + iconSize * 0.5f;
+                Widgets::DrawIcon(dl, tabs[i].icon, ImVec2(cx, (a.y + b.y) * 0.5f), iconSize, color);
+            }
+            if (!iconOnly)
+                dl->AddText(Theme::semibold, fontSize, ImVec2(a.x + padX + (showIcon ? iconSize + gap : 0.0f), (a.y + b.y) * 0.5f - fontSize * 0.55f),
+                    color, tabs[i].label.c_str());
 
             if (clicked) {
                 g_historyOpen = false;
                 // открыта только одна страница; повторный клик по своей вкладке — назад на главную
-                const bool again = i == selected;
-                if (SettingsPage::IsOpen() && (i != 3 || again)) SettingsPage::Close();
-                if (ScenariosPage::IsOpen() && (i != 1 || again)) ScenariosPage::Close();
-                if (ProcessesPage::IsOpen() && (i != 2 || again)) ProcessesPage::Close();
-                if (!again && i == 1) ScenariosPage::Open();
-                if (!again && i == 2) ProcessesPage::Open();
-                if (!again && i == 3) SettingsPage::Open();
+                const int id = tabs[i].id;
+                const bool again = id == open;
+                if (SettingsPage::IsOpen() && (id != 3 || again)) SettingsPage::Close();
+                if (ScenariosPage::IsOpen() && (id != 1 || again)) ScenariosPage::Close();
+                if (ProcessesPage::IsOpen() && (id != 2 || again)) ProcessesPage::Close();
+                if (!again && id == 1) ScenariosPage::Open();
+                if (!again && id == 2) ProcessesPage::Open();
+                if (!again && id == 3) SettingsPage::Open();
             }
             x += widths[i];
         }
@@ -560,6 +664,6 @@ void Ui::SetHistory(bool open) { g_historyOpen = open; }
 float Ui::TitleHeight() { return g_titleHeight; } // настройки начинаются под шапкой — её можно тянуть всегда
 
 bool Ui::IsCaption(float x, float y) {
-    if (y >= g_titleHeight || x >= g_titleButtonsLeft - Px(8)) return false;
+    if (y >= g_titleHeight || x >= g_titleButtonsLeft - Px(8) || HomeLayout::HitsBlock(x, y)) return false;
     return !(x >= g_navMin.x && x <= g_navMax.x && y >= g_navMin.y && y <= g_navMax.y);
 }
