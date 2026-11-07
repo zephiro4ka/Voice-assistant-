@@ -1,12 +1,16 @@
 #include "ScenariosPage.h"
 
 #include "Launcher.h"
+#include "Log.h"
+#include "Settings.h"
 #include "Scenarios.h"
 #include "TextUtils.h"
 #include "Theme.h"
 #include "Widgets.h"
+#include "../ImGui/imgui_internal.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <mutex>
 #include <cmath>
 #include <cstdio>
@@ -131,74 +135,6 @@ namespace {
         }
     }
 
-    // Соединитель между блоками: линия с «бегущими» точками и кнопка «+» (вставить блок)
-    bool Connector(ImDrawList* dl, float x, float width, int insertAt, std::vector<Scenarios::Block>& blocks) {
-        const ImVec2 start = ImGui::GetCursorScreenPos();
-        const float h = Px(34), cx = x + Px(26);
-        const float t = static_cast<float>(ImGui::GetTime());
-        dl->AddLine(ImVec2(cx, start.y), ImVec2(cx, start.y + h), IM_COL32(255, 255, 255, 30), Px(2));
-        for (int i = 0; i < 3; ++i) { // течение сверху вниз — цепочка «живая»
-            const float k = std::fmod(t * 0.8f + i / 3.0f, 1.0f);
-            dl->AddCircleFilled(ImVec2(cx, start.y + h * k), Px(2.2f), Theme::Accent().WithAlpha(0.8f * std::sin(k * 3.1416f)), 10);
-        }
-        ImGui::PushID(insertAt);
-        const bool add = Widgets::IconButton("##add", ImVec2(cx + Px(16), start.y + h * 0.5f - Px(12)), Px(24), Icon::Plus);
-        if (add) ImGui::OpenPopup("##stepMenu");
-        bool changed = false;
-        if (ImGui::BeginPopup("##stepMenu")) {
-            ImGui::TextDisabled("добавить блок");
-            for (int s = 0; s < static_cast<int>(Step::kCount); ++s)
-                if (ImGui::Selectable(Scenarios::StepName(static_cast<Step>(s)))) {
-                    Scenarios::Block block;
-                    block.step = static_cast<Step>(s);
-                    if (block.step == Step::Volume) block.number = 50;
-                    if (block.step == Step::Wait) block.number = 3;
-                    blocks.insert(blocks.begin() + insertAt, block);
-                    changed = true;
-                }
-            ImGui::EndPopup();
-        }
-        ImGui::PopID();
-        ImGui::SetCursorScreenPos(ImVec2(start.x, start.y + h));
-        ImGui::Dummy(ImVec2(width, 0));
-        return changed;
-    }
-
-    // Карточка-блок с цветной полоской; содержимое рисует fields. Возвращает высоту
-    template <class Fields>
-    void BlockCard(ImDrawList* dl, float x, float width, Theme::Color color, Icon icon, const char* title, float appear, Fields&& fields,
-                   bool* remove = nullptr, bool* up = nullptr, bool* down = nullptr) {
-        const ImVec2 start = ImGui::GetCursorScreenPos();
-        const float pad = Px(16), slide = (1.0f - appear) * Px(16);
-        dl->ChannelsSplit(2);
-        dl->ChannelsSetCurrent(1);
-        ImGui::SetCursorScreenPos(ImVec2(x + pad + Px(6), start.y + pad + slide));
-        ImGui::BeginGroup();
-        const ImVec2 head = ImGui::GetCursorScreenPos();
-        dl->AddCircleFilled(ImVec2(head.x + Px(11), head.y + Px(11)), Px(13), color.WithAlpha(0.18f * appear), 24);
-        Widgets::DrawIcon(dl, icon, ImVec2(head.x + Px(11), head.y + Px(11)), Px(13), color.WithAlpha(appear));
-        Widgets::Text(dl, Theme::semibold, ImVec2(head.x + Px(32), head.y + Px(3)), Theme::kInk, title);
-        float bx = x + width - pad - Px(26);
-        if (remove && Widgets::IconButton("##remove", ImVec2(bx, head.y - Px(2)), Px(26), Icon::Trash, true)) *remove = true;
-        bx -= Px(30);
-        if (down && Widgets::IconButton("##down", ImVec2(bx, head.y - Px(2)), Px(26), Icon::Next)) *down = true; // ↓
-        bx -= Px(30);
-        if (up && Widgets::IconButton("##up", ImVec2(bx, head.y - Px(2)), Px(26), Icon::Previous)) *up = true; // ↑
-        ImGui::SetCursorScreenPos(ImVec2(head.x, head.y + Px(30)));
-        fields(width - pad * 2 - Px(6));
-        ImGui::EndGroup();
-        const ImVec2 end(x + width, ImGui::GetItemRectMax().y + pad);
-        dl->ChannelsSetCurrent(0);
-        const ImVec2 a(x, start.y + slide), b(end.x, end.y);
-        const bool hovered = ImGui::IsMouseHoveringRect(a, b, false);
-        dl->AddRectFilled(a, b, Theme::Surface(hovered ? 0.95f : 0.85f), Px(16));
-        dl->AddRect(a, b, IM_COL32(255, 255, 255, hovered ? 40 : 22), Px(16));
-        dl->AddRectFilled(ImVec2(a.x, a.y + Px(10)), ImVec2(a.x + Px(4), b.y - Px(10)), color.WithAlpha(appear), Px(2));
-        dl->ChannelsMerge();
-        ImGui::SetCursorScreenPos(ImVec2(start.x, b.y));
-        ImGui::Dummy(ImVec2(width, 0));
-    }
-
     void DrawList(ImDrawList* dl, ImVec2 pos, float width, float height) {
         dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), IM_COL32(255, 255, 255, 8), Px(18));
         dl->AddRect(pos, ImVec2(pos.x + width, pos.y + height), IM_COL32(255, 255, 255, 20), Px(18));
@@ -223,33 +159,343 @@ namespace {
         ImGui::SetCursorScreenPos(a);
         if (ImGui::Button("+ новый сценарий", ImVec2(width - Px(16), Px(38)))) {
             g_list.push_back({});
-            g_list.back().blocks.push_back({});
+            g_list.back().hasLayout = true; // пустой холст — только «Слушать»
             g_selected = static_cast<int>(g_list.size()) - 1;
             g_chainAnim = 0.0f;
             g_dirty = true;
         }
     }
 
-    void DrawEditor(float width) {
+    // ================================================================ холст сценария
+    // Блоки лежат где угодно (координаты холста), стрелки идут от кружка справа к кружку слева у следующего блока.
+    // Колесо — масштаб, тянешь пустое место — двигаешь холст. Внизу — палитра: тянешь блок оттуда на холст.
+    constexpr int kStartId = 0;          // «Слушать» — у него номер 0
+    constexpr float kNodeWidth = 300.0f; // ширина блока на холсте (до масштаба)
+
+    struct Canvas {
+        ImVec2 pan{ 60, 40 };
+        float zoom = 1.0f;
+        int selected = -1;               // выделенный блок (новые из палитры подключаются к нему)
+        int linkFrom = -1;               // тянем стрелку от этого блока (-1 — не тянем)
+        int dragNode = -1;               // двигаем этот блок
+        ImVec2 dragOffset;
+        int newStep = -1;                // тянем новый блок из палитры
+        int lastScenario = -1;
+        bool panning = false;
+        std::unordered_map<int, float> heights; // высота блоков в прошлом кадре
+        std::unordered_map<int, float> appear;  // появление новых блоков
+    };
+    Canvas g_canvas;
+
+    ImU32 NodeColor(const Scenarios::Block& b, float a) { return (b.color >= 0 ? Theme::FromRgb(b.color) : StepColor(b.step)).WithAlpha(a); }
+
+    Scenarios::Block* FindBlock(Scenarios::Scenario& s, int id) {
+        for (auto& b : s.blocks) if (b.id == id) return &b;
+        return nullptr;
+    }
+
+    std::vector<int>& NextOf(Scenarios::Scenario& s, int id) {
+        if (id == kStartId) return s.startNext;
+        return FindBlock(s, id)->next;
+    }
+
+    ImVec2 NodePos(Scenarios::Scenario& s, int id) {
+        if (id == kStartId) return ImVec2(s.startX, s.startY);
+        const auto* b = FindBlock(s, id);
+        return b ? ImVec2(b->x, b->y) : ImVec2(0, 0);
+    }
+
+    // точки стрелки: выход — справа у заголовка, вход — слева у заголовка
+    ImVec2 ToScreen(ImVec2 origin, ImVec2 p) { return ImVec2(origin.x + g_canvas.pan.x + p.x * g_canvas.zoom, origin.y + g_canvas.pan.y + p.y * g_canvas.zoom); }
+    ImVec2 ToCanvas(ImVec2 origin, ImVec2 p) { return ImVec2((p.x - origin.x - g_canvas.pan.x) / g_canvas.zoom, (p.y - origin.y - g_canvas.pan.y) / g_canvas.zoom); }
+    ImVec2 OutPort(ImVec2 origin, ImVec2 node) { return ToScreen(origin, ImVec2(node.x + kNodeWidth, node.y + 24.0f)); }
+    ImVec2 InPort(ImVec2 origin, ImVec2 node) { return ToScreen(origin, ImVec2(node.x, node.y + 24.0f)); }
+
+    // кривая (0), косая (1) или прямая (2) — точки линии, чтобы и нарисовать, и попасть мышью
+    std::vector<ImVec2> LinkPoints(ImVec2 a, ImVec2 b, int style) {
+        std::vector<ImVec2> pts;
+        if (style == 2) return { a, b };
+        if (style == 1) { // косая: короткий отвод, наискосок, короткий подвод
+            const float stub = Px(26) * g_canvas.zoom;
+            return { a, ImVec2(a.x + stub, a.y), ImVec2(b.x - stub, b.y), b };
+        }
+        // назад (из конца ряда в начало следующего) — аккуратная петля, а не дуга через весь холст
+        const float d = std::clamp(std::fabs(b.x - a.x) * 0.5f, Px(50) * g_canvas.zoom, Px(130) * g_canvas.zoom);
+        const ImVec2 c1(a.x + d, a.y), c2(b.x - d, b.y);
+        for (int i = 0; i <= 28; ++i) pts.push_back(ImBezierCubicCalc(a, c1, c2, b, i / 28.0f));
+        return pts;
+    }
+
+    float DistanceToPolyline(const std::vector<ImVec2>& pts, ImVec2 p) {
+        float best = 1e9f;
+        for (size_t i = 1; i < pts.size(); ++i) {
+            const ImVec2 q = ImLineClosestPoint(pts[i - 1], pts[i], p);
+            best = std::min(best, std::sqrt((q.x - p.x) * (q.x - p.x) + (q.y - p.y) * (q.y - p.y)));
+        }
+        return best;
+    }
+
+    ImVec2 PointAt(const std::vector<ImVec2>& pts, float t) { // точка на ломаной по доле длины — для «бегущих» огоньков
+        float total = 0;
+        for (size_t i = 1; i < pts.size(); ++i) total += std::hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+        float want = total * t;
+        for (size_t i = 1; i < pts.size(); ++i) {
+            const float len = std::hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+            if (want <= len && len > 0) return ImLerp(pts[i - 1], pts[i], want / len);
+            want -= len;
+        }
+        return pts.back();
+    }
+
+    void DrawLink(ImDrawList* dl, const std::vector<ImVec2>& pts, ImU32 color, float thickness, bool flow) {
+        dl->AddPolyline(pts.data(), static_cast<int>(pts.size()), color, ImDrawFlags_None, thickness);
+        if (!flow) return;
+        const float t = static_cast<float>(ImGui::GetTime());
+        for (int i = 0; i < 3; ++i) { // течение — по стрелке, от блока к блоку
+            const float k = std::fmod(t * 0.45f + i / 3.0f, 1.0f);
+            dl->AddCircleFilled(PointAt(pts, k), Px(2.6f) * g_canvas.zoom, Theme::Accent().WithAlpha(0.9f * std::sin(k * 3.1416f)), 10);
+        }
+        const ImVec2 end = pts.back(), before = pts[pts.size() - 2];
+        const float len = std::max(1.0f, std::hypot(end.x - before.x, end.y - before.y));
+        const ImVec2 dir((end.x - before.x) / len, (end.y - before.y) / len), side(-dir.y, dir.x);
+        const float s = Px(7) * g_canvas.zoom;
+        dl->AddTriangleFilled(end, ImVec2(end.x - dir.x * s + side.x * s * 0.6f, end.y - dir.y * s + side.y * s * 0.6f),
+                              ImVec2(end.x - dir.x * s - side.x * s * 0.6f, end.y - dir.y * s - side.y * s * 0.6f), color);
+    }
+
+    Scenarios::Block NewBlock(Step step) {
+        Scenarios::Block block;
+        block.step = step;
+        if (step == Step::Volume) block.number = 50;
+        if (step == Step::Wait) block.number = 3;
+        return block;
+    }
+
+    void RemoveLinksTo(Scenarios::Scenario& s, int id) {
+        auto drop = [id](std::vector<int>& v) { v.erase(std::remove(v.begin(), v.end(), id), v.end()); };
+        drop(s.startNext);
+        for (auto& b : s.blocks) drop(b.next);
+    }
+
+    // Меню блока по правому клику: название, цвет, копия, удалить
+    void NodeMenu(Scenarios::Scenario& s, int id) {
+        Scenarios::Block* b = FindBlock(s, id);
+        if (!b) return;
+        ImGui::TextDisabled("название блока");
+        InputString("##title", b->title, Scenarios::StepName(b->step), Px(220));
+        ImGui::TextDisabled("цвет");
+        static const int kColors[] = { -1, 0x7DAFF5, 0x6ED2B4, 0xFAA57D, 0xF5CD5F, 0xF472B6, 0xA78BFA, 0xC0C4CE };
+        for (int i = 0; i < IM_ARRAYSIZE(kColors); ++i) {
+            if (i) ImGui::SameLine();
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            ImGui::PushID(i);
+            if (ImGui::InvisibleButton("##color", ImVec2(Px(22), Px(22)))) { b->color = kColors[i]; g_dirty = true; }
+            ImGui::PopID();
+            const ImU32 c = kColors[i] < 0 ? StepColor(b->step).WithAlpha(1.0f) : Theme::FromRgb(kColors[i]).WithAlpha(1.0f);
+            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(p.x + Px(11), p.y + Px(11)), Px(9), c, 20);
+            if (b->color == kColors[i]) ImGui::GetWindowDrawList()->AddCircle(ImVec2(p.x + Px(11), p.y + Px(11)), Px(11), IM_COL32(255, 255, 255, 220), 20, Px(1.5f));
+        }
+        ImGui::Separator();
+        if (ImGui::Selectable("копия блока")) {
+            Scenarios::Block copy = *b;
+            int maxId = 0;
+            for (const auto& o : s.blocks) maxId = std::max(maxId, o.id);
+            copy.id = maxId + 1;
+            copy.x += 30, copy.y += 30;
+            copy.next.clear();
+            s.blocks.push_back(copy);
+            g_canvas.selected = copy.id;
+            g_dirty = true;
+        }
+        if (ImGui::Selectable("убрать стрелки из блока")) { b->next.clear(); g_dirty = true; }
+        if (ImGui::Selectable("удалить блок")) {
+            RemoveLinksTo(s, id);
+            s.blocks.erase(std::remove_if(s.blocks.begin(), s.blocks.end(), [id](const Scenarios::Block& x) { return x.id == id; }), s.blocks.end());
+            g_canvas.selected = -1;
+            g_dirty = true;
+        }
+    }
+
+    // Показать все блоки: масштаб и сдвиг, чтобы схема поместилась
+    void FitCanvas(Scenarios::Scenario& s, ImVec2 size) {
+        ImVec2 mn(s.startX, s.startY), mx(s.startX + kNodeWidth, s.startY + 120);
+        for (const auto& b : s.blocks) {
+            mn = ImVec2(std::min(mn.x, b.x), std::min(mn.y, b.y));
+            mx = ImVec2(std::max(mx.x, b.x + kNodeWidth), std::max(mx.y, b.y + 160));
+        }
+        const float w = mx.x - mn.x, h = mx.y - mn.y;
+        g_canvas.zoom = std::clamp(std::min((size.x - Px(150)) / std::max(1.0f, w), (size.y - Px(120)) / std::max(1.0f, h)), 0.5f, 1.0f);
+        g_canvas.pan = ImVec2(Px(75) - mn.x * g_canvas.zoom, Px(50) - mn.y * g_canvas.zoom); // поля — чтобы петли стрелок не уходили за край
+    }
+
+    // Один блок на холсте. Возвращает true, если блок удалили
+    bool DrawNode(ImDrawList* dl, ImVec2 origin, Scenarios::Scenario& s, int id) {
+        const bool start = id == kStartId;
+        Scenarios::Block* b = start ? nullptr : FindBlock(s, id);
+        if (!start && !b) return false;
+        const float z = g_canvas.zoom;
+        float& shown = g_canvas.appear.try_emplace(id, 0.0f).first->second;
+        shown += (1.0f - shown) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
+        const float appear = 1.0f - std::pow(1.0f - shown, 3.0f);
+
+        const ImVec2 pos = NodePos(s, id);
+        const ImVec2 a = ToScreen(origin, pos);
+        const float width = kNodeWidth * z, pad = Px(14) * z;
+        const float height = g_canvas.heights.count(id) ? g_canvas.heights[id] : Px(90) * z;
+        const ImVec2 bmax(a.x + width, a.y + height);
+        const bool selected = g_canvas.selected == id;
+        const Theme::Color color = start ? Theme::Color{ 167, 139, 250 } : (b->color >= 0 ? Theme::FromRgb(b->color) : StepColor(b->step));
+        ImGui::PushID(id);
+
+        // кружки-порты (раньше остального — чтобы мышь доставалась им)
+        const ImVec2 outP = OutPort(origin, pos), inP = InPort(origin, pos);
+        const float portR = Px(7) * z;
+        ImGui::SetCursorScreenPos(ImVec2(outP.x - portR * 1.6f, outP.y - portR * 1.6f));
+        ImGui::InvisibleButton("##out", ImVec2(portR * 3.2f, portR * 3.2f));
+        const bool outHovered = ImGui::IsItemHovered();
+        if (ImGui::IsItemActivated()) g_canvas.linkFrom = id;
+        bool inHovered = false;
+        if (!start) {
+            ImGui::SetCursorScreenPos(ImVec2(inP.x - portR * 1.6f, inP.y - portR * 1.6f));
+            ImGui::InvisibleButton("##in", ImVec2(portR * 3.2f, portR * 3.2f));
+            inHovered = ImGui::IsItemHovered() || (g_canvas.linkFrom >= 0 && ImGui::IsMouseHoveringRect(a, bmax, false));
+        }
+
+        // содержимое
+        dl->ChannelsSetCurrent(2);
+        ImGui::PushFont(nullptr, ImGui::GetFontSize() * z);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x * z, ImGui::GetStyle().FramePadding.y * z));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x * z, ImGui::GetStyle().ItemSpacing.y * z));
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * appear);
+        const ImVec2 head(a.x + pad, a.y + Px(12) * z);
+        dl->AddCircleFilled(ImVec2(head.x + Px(11) * z, head.y + Px(11) * z), Px(13) * z, color.WithAlpha(0.2f * appear), 24);
+        Widgets::DrawIcon(dl, start ? Icon::Mic : StepIcon(b->step), ImVec2(head.x + Px(11) * z, head.y + Px(11) * z), Px(13) * z, color.WithAlpha(appear));
+        const std::string title = start ? "Слушать" : (b->title.empty() ? Scenarios::StepName(b->step) : b->title);
+        dl->AddText(Theme::semibold, Theme::semibold->LegacySize * z, ImVec2(head.x + Px(32) * z, head.y + Px(4) * z), Theme::kInk, title.c_str());
+        bool removed = false;
+        if (!start && Widgets::IconButton("##remove", ImVec2(a.x + width - pad - Px(24) * z, head.y - Px(1) * z), Px(24) * z, Icon::Trash, true)) {
+            RemoveLinksTo(s, id);
+            s.blocks.erase(std::remove_if(s.blocks.begin(), s.blocks.end(), [id](const Scenarios::Block& x) { return x.id == id; }), s.blocks.end());
+            g_dirty = true;
+            removed = true;
+        }
+        float bottom = head.y + Px(30) * z;
+        if (!removed) {
+            ImGui::SetCursorScreenPos(ImVec2(head.x, head.y + Px(32) * z));
+            ImGui::BeginGroup();
+            const float inner = width - pad * 2;
+            if (start) {
+                ImGui::TextDisabled("%s, …", Config::Get().assistant.c_str());
+                InputString("##phrase", s.phrase, "уютный вечер", inner);
+            } else {
+                BlockFields(*b, inner);
+            }
+            ImGui::EndGroup();
+            bottom = ImGui::GetItemRectMax().y;
+        }
+        ImGui::PopStyleVar(3);
+        ImGui::PopFont();
+        g_canvas.heights[id] = bottom + pad - a.y;
+
+        // весь блок — тянуть (после полей: поля важнее)
+        bool menu = false;
+        if (!removed) {
+            ImGui::SetCursorScreenPos(a);
+            ImGui::InvisibleButton("##node", ImVec2(width, std::max(1.0f, height)), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+            if (ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                g_canvas.dragNode = id;
+                g_canvas.selected = id;
+                const ImVec2 m = ToCanvas(origin, ImGui::GetIO().MousePos);
+                g_canvas.dragOffset = ImVec2(m.x - pos.x, m.y - pos.y);
+            }
+            if (ImGui::IsItemHovered() && g_canvas.dragNode < 0) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            if (!start && ImGui::IsItemClicked(ImGuiMouseButton_Right)) { g_canvas.selected = id; menu = true; }
+        }
+        ImGui::PopID();
+        if (menu) ImGui::OpenPopup(("##nodeMenu" + std::to_string(id)).c_str());
+        if (!start && !removed && Widgets::BeginPopupAnimated(("##nodeMenu" + std::to_string(id)).c_str())) {
+            NodeMenu(s, id);
+            Widgets::EndPopupAnimated();
+        }
+        if (removed) return true;
+
+        // подложка блока
+        dl->ChannelsSetCurrent(1);
+        const ImVec2 b2(a.x + width, a.y + g_canvas.heights[id]);
+        if (selected) dl->AddRect(ImVec2(a.x - Px(3), a.y - Px(3)), ImVec2(b2.x + Px(3), b2.y + Px(3)), Theme::Accent().WithAlpha(0.6f * appear), Px(18) * z, 0, Px(2));
+        dl->AddRectFilled(a, b2, Theme::Surface(0.93f * appear), Px(16) * z);
+        dl->AddRectFilledMultiColor(ImVec2(a.x + Px(1), a.y + Px(1)), ImVec2(b2.x - Px(1), a.y + Px(40) * z),
+            color.WithAlpha(0.14f * appear), color.WithAlpha(0.06f * appear), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0));
+        dl->AddRect(a, b2, inHovered && g_canvas.linkFrom >= 0 && g_canvas.linkFrom != id ? Theme::Accent().WithAlpha(0.9f) : IM_COL32(255, 255, 255, 26), Px(16) * z, 0, Px(1.2f));
+        // порты
+        dl->ChannelsSetCurrent(2);
+        const ImU32 portColor = color.WithAlpha(appear);
+        dl->AddCircleFilled(outP, portR * (outHovered ? 1.3f : 1.0f), Theme::Surface(1.0f), 16);
+        dl->AddCircle(outP, portR * (outHovered ? 1.3f : 1.0f), portColor, 16, Px(2) * z);
+        if (!NextOf(s, id).empty() || outHovered) dl->AddCircleFilled(outP, portR * 0.45f, portColor, 12);
+        if (!start) {
+            dl->AddCircleFilled(inP, portR, Theme::Surface(1.0f), 16);
+            dl->AddCircle(inP, portR, inHovered && g_canvas.linkFrom >= 0 ? Theme::Accent().WithAlpha(1.0f) : IM_COL32(255, 255, 255, 120), 16, Px(2) * z);
+        }
+        return false;
+    }
+
+    void DrawPalette(ImDrawList* dl, ImVec2 pos, float width, float height) {
+        dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), Theme::Surface(0.92f), Px(18));
+        dl->AddRect(pos, ImVec2(pos.x + width, pos.y + height), IM_COL32(255, 255, 255, 22), Px(18));
+        Widgets::Text(dl, Theme::semibold, ImVec2(pos.x + Px(16), pos.y + Px(8)), Theme::kInkMuted, "блоки — зажми и перетащи на холст");
+        float x = pos.x + Px(12);
+        const float y = pos.y + Px(30), h = height - Px(40);
+        for (int i = 0; i < static_cast<int>(Step::kCount); ++i) {
+            const Step step = static_cast<Step>(i);
+            static const char* kShort[] = { "Программа", "Ссылка", "Окно", "Громкость", "Музыка", "Подождать", "Сказать" };
+            const char* name = i < IM_ARRAYSIZE(kShort) ? kShort[i] : Scenarios::StepName(step);
+            const float w = Widgets::TextSize(Theme::semibold, name).x + Px(44);
+            if (x + w > pos.x + width - Px(12)) break;
+            const ImVec2 a(x, y), b(x + w, y + h);
+            ImGui::SetCursorScreenPos(a);
+            ImGui::PushID(i);
+            ImGui::InvisibleButton("##palette", ImVec2(w, h));
+            const bool hovered = ImGui::IsItemHovered();
+            if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, Px(4))) g_canvas.newStep = i;
+            ImGui::PopID();
+            const Theme::Color color = StepColor(step);
+            dl->AddRectFilled(a, b, hovered ? IM_COL32(255, 255, 255, 18) : IM_COL32(255, 255, 255, 8), h * 0.5f);
+            dl->AddRect(a, b, color.WithAlpha(hovered ? 0.8f : 0.4f), h * 0.5f, 0, Px(1.2f));
+            Widgets::DrawIcon(dl, StepIcon(step), ImVec2(a.x + Px(18), (a.y + b.y) * 0.5f), Px(12), color.WithAlpha(1.0f));
+            Widgets::Text(dl, Theme::semibold, ImVec2(a.x + Px(32), (a.y + b.y) * 0.5f - Theme::semibold->LegacySize * 0.55f), Theme::kInk, name);
+            if (hovered) { ImGui::SetMouseCursor(ImGuiMouseCursor_Hand); ImGui::SetTooltip("%s — зажми и перетащи на холст", Scenarios::StepName(step)); }
+            x += w + Px(6);
+        }
+    }
+
+    void DrawEditor(ImVec2 areaMin, ImVec2 areaMax) {
         if (g_list.empty() || g_selected < 0 || g_selected >= static_cast<int>(g_list.size())) {
+            ImGui::SetCursorScreenPos(areaMin);
             ImGui::TextDisabled("Создай первый сценарий слева");
             return;
         }
         auto& s = g_list[g_selected];
+        Scenarios::Normalize(s);
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        const float x = ImGui::GetCursorScreenPos().x;
-        g_chainAnim += (1.0f - g_chainAnim) * std::min(1.0f, ImGui::GetIO().DeltaTime * 8.0f);
-        auto appear = [&](int index) { // блоки появляются по очереди
-            const float t = std::clamp(g_chainAnim * 1.6f - index * 0.12f, 0.0f, 1.0f);
-            return 1.0f - std::pow(1.0f - t, 3.0f);
-        };
+        ImGuiIO& io = ImGui::GetIO();
 
-        // название, включён, проверить
-        InputString("##name", s.name, "название сценария", std::min(width - Px(220), Px(360)));
+        // строка сверху: название, включён, проверить, вид стрелок, показать всё, удалить
+        ImGui::SetCursorScreenPos(areaMin);
+        const float width = areaMax.x - areaMin.x;
+        InputString("##name", s.name, "название сценария", std::min(width - Px(560), Px(320)));
         ImGui::SameLine();
         if (Widgets::Toggle("##enabled", ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y + Px(10)), &s.enabled, Theme::Accent().WithAlpha(1.0f))) g_dirty = true;
         ImGui::SameLine();
         if (ImGui::Button("▶ проверить")) Scenarios::Run(s);
+        ImGui::SameLine();
+        static const char* kStyles[] = { "стрелки: кривые", "стрелки: косые", "стрелки: прямые" };
+        if (Widgets::Combo("##linkStyle", &s.linkStyle, kStyles, 3, Px(170))) g_dirty = true;
+        ImGui::SameLine();
+        const float toolbarH = ImGui::GetFrameHeight() + Px(12);
+        const ImVec2 canvasMin(areaMin.x, areaMin.y + toolbarH), canvasMax(areaMax.x, areaMax.y - Px(92));
+        const ImVec2 canvasSize(canvasMax.x - canvasMin.x, canvasMax.y - canvasMin.y);
+        if (ImGui::Button("показать всё")) FitCanvas(s, canvasSize);
         ImGui::SameLine();
         if (ImGui::Button("удалить")) {
             g_list.erase(g_list.begin() + g_selected);
@@ -257,37 +503,145 @@ namespace {
             g_dirty = true;
             return;
         }
-        ImGui::Dummy(ImVec2(0, Px(8)));
-
-        int index = 0;
-        BlockCard(dl, x, width, Theme::Accent(), Icon::Mic, "Слушать", appear(index++), [&](float w) {
-            ImGui::TextDisabled("Аня, …");
-            ImGui::SameLine();
-            InputString("##phrase", s.phrase, "уютный вечер", w - Px(60));
-        });
-        if (Connector(dl, x, width, 0, s.blocks)) { g_dirty = true; g_chainAnim = 0.6f; }
-
-        for (int i = 0; i < static_cast<int>(s.blocks.size()); ++i) {
-            ImGui::PushID(i);
-            bool remove = false, up = false, down = false;
-            auto& b = s.blocks[i];
-            BlockCard(dl, x, width, StepColor(b.step), StepIcon(b.step), Scenarios::StepName(b.step), appear(index++),
-                [&](float w) { BlockFields(b, w); }, &remove, i > 0 ? &up : nullptr, i + 1 < static_cast<int>(s.blocks.size()) ? &down : nullptr);
-            ImGui::PopID();
-            if (remove) { s.blocks.erase(s.blocks.begin() + i); g_dirty = true; break; }
-            if (up) { std::swap(s.blocks[i], s.blocks[i - 1]); g_dirty = true; break; }
-            if (down) { std::swap(s.blocks[i], s.blocks[i + 1]); g_dirty = true; break; }
-            if (Connector(dl, x, width, i + 1, s.blocks)) { g_dirty = true; break; }
+        if (g_canvas.lastScenario != g_selected) { // другой сценарий — показать его целиком
+            g_canvas.lastScenario = g_selected;
+            g_canvas.selected = g_canvas.linkFrom = g_canvas.dragNode = -1;
+            g_canvas.heights.clear();
+            g_canvas.appear.clear();
+            FitCanvas(s, canvasSize);
         }
 
-        // «Конец» — маленькая пилюля
-        const ImVec2 p = ImGui::GetCursorScreenPos();
-        const float a = appear(index);
-        dl->AddRectFilled(ImVec2(x, p.y), ImVec2(x + Px(96), p.y + Px(34)), Theme::Surface(0.85f * a), Px(17));
-        dl->AddRect(ImVec2(x, p.y), ImVec2(x + Px(96), p.y + Px(34)), IM_COL32(255, 255, 255, static_cast<int>(26 * a)), Px(17));
-        dl->AddCircleFilled(ImVec2(x + Px(18), p.y + Px(17)), Px(4), Theme::kOk, 12);
-        Widgets::Text(dl, Theme::semibold, ImVec2(x + Px(30), p.y + Px(9)), Theme::kInk, "Конец");
-        ImGui::Dummy(ImVec2(width, Px(48)));
+        // фон холста: точки сетки
+        dl->AddRectFilled(canvasMin, canvasMax, IM_COL32(0, 0, 0, 40), Px(18));
+        dl->AddRect(canvasMin, canvasMax, IM_COL32(255, 255, 255, 18), Px(18));
+        ImGui::PushClipRect(canvasMin, canvasMax, true); // одна обрезка — и для рисунка, и для мыши
+        const float step = Px(24) * g_canvas.zoom;
+        for (float gx = std::fmod(g_canvas.pan.x, step); gx < canvasSize.x; gx += step)
+            for (float gy = std::fmod(g_canvas.pan.y, step); gy < canvasSize.y; gy += step)
+                dl->AddCircleFilled(ImVec2(canvasMin.x + gx, canvasMin.y + gy), Px(1.1f), IM_COL32(255, 255, 255, 22), 4);
+        if (s.blocks.empty())
+            Widgets::Text(dl, Theme::semibold, ImVec2(canvasMin.x + Px(380), canvasMin.y + Px(60)), Theme::kInkMuted,
+                          "перетащи блок снизу и соедини: тяни от кружка справа к следующему блоку");
+
+        dl->ChannelsSplit(3);
+        const ImVec2 origin = canvasMin;
+        const bool canvasHovered = ImGui::IsMouseHoveringRect(canvasMin, canvasMax) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
+
+        // блоки
+        std::vector<int> ids{ kStartId };
+        for (const auto& b : s.blocks) ids.push_back(b.id);
+        for (int id : ids)
+            if (DrawNode(dl, origin, s, id)) break; // удалили — список поменялся, дорисуем в следующем кадре
+
+        // стрелки
+        dl->ChannelsSetCurrent(0);
+        int removeFrom = -1, removeTo = -1;
+        for (int from : ids) {
+            if (from != kStartId && !FindBlock(s, from)) continue;
+            for (int to : NextOf(s, from)) {
+                if (!FindBlock(s, to)) continue;
+                const auto pts = LinkPoints(OutPort(origin, NodePos(s, from)), InPort(origin, NodePos(s, to)), s.linkStyle);
+                const bool hovered = canvasHovered && g_canvas.linkFrom < 0 && g_canvas.dragNode < 0 && DistanceToPolyline(pts, io.MousePos) < Px(6);
+                const ImU32 color = hovered ? IM_COL32(255, 120, 120, 230) : Theme::Accent().WithAlpha(0.75f);
+                DrawLink(dl, pts, color, Px(hovered ? 3.0f : 2.2f) * g_canvas.zoom, !hovered);
+                if (hovered) {
+                    ImGui::SetTooltip("правый клик — убрать стрелку");
+                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) removeFrom = from, removeTo = to;
+                }
+            }
+        }
+        if (removeFrom >= 0 || removeTo >= 0) {
+            auto& v = NextOf(s, removeFrom);
+            v.erase(std::remove(v.begin(), v.end(), removeTo), v.end());
+            g_dirty = true;
+        }
+
+        // тянем новую стрелку
+        if (g_canvas.linkFrom >= 0) {
+            const ImVec2 from = OutPort(origin, NodePos(s, g_canvas.linkFrom));
+            DrawLink(dl, LinkPoints(from, io.MousePos, s.linkStyle), Theme::Accent().WithAlpha(0.95f), Px(2.4f) * g_canvas.zoom, false);
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) { // отпустили — над каким блоком?
+                for (const auto& b : s.blocks) {
+                    const ImVec2 a = ToScreen(origin, ImVec2(b.x, b.y));
+                    const float h = g_canvas.heights.count(b.id) ? g_canvas.heights[b.id] : Px(90);
+                    if (b.id != g_canvas.linkFrom && io.MousePos.x >= a.x - Px(14) && io.MousePos.x <= a.x + kNodeWidth * g_canvas.zoom && io.MousePos.y >= a.y && io.MousePos.y <= a.y + h) {
+                        auto& next = NextOf(s, g_canvas.linkFrom);
+                        if (std::find(next.begin(), next.end(), b.id) == next.end()) next.push_back(b.id);
+                        g_dirty = true;
+                        break;
+                    }
+                }
+                g_canvas.linkFrom = -1;
+            }
+        }
+        dl->ChannelsMerge();
+        ImGui::PopClipRect();
+
+        // двигаем блок
+        if (g_canvas.dragNode >= 0) {
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                const ImVec2 m = ToCanvas(origin, io.MousePos);
+                ImVec2 p(m.x - g_canvas.dragOffset.x, m.y - g_canvas.dragOffset.y);
+                if (!io.KeyAlt) p = ImVec2(std::round(p.x / 20.0f) * 20.0f, std::round(p.y / 20.0f) * 20.0f); // по сетке; Alt — свободно
+                if (g_canvas.dragNode == kStartId) s.startX = p.x, s.startY = p.y;
+                else if (auto* b = FindBlock(s, g_canvas.dragNode)) b->x = p.x, b->y = p.y;
+            } else {
+                g_canvas.dragNode = -1;
+                g_dirty = true;
+            }
+        }
+
+        // пустое место холста: тянуть — двигать, колесо — масштаб (последним — блоки важнее)
+        ImGui::SetCursorScreenPos(canvasMin);
+        ImGui::InvisibleButton("##canvasBg", canvasSize, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle);
+        if (ImGui::IsItemActivated()) g_canvas.selected = -1;
+        if (ImGui::IsItemActive()) { g_canvas.pan.x += io.MouseDelta.x; g_canvas.pan.y += io.MouseDelta.y; ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll); }
+        if (canvasHovered && io.MouseWheel != 0.0f && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) {
+            const ImVec2 before = ToCanvas(origin, io.MousePos);
+            g_canvas.zoom = std::clamp(g_canvas.zoom * (io.MouseWheel > 0 ? 1.1f : 1.0f / 1.1f), 0.5f, 1.6f);
+            const ImVec2 after = ToScreen(origin, before); // масштаб — вокруг мыши
+            g_canvas.pan.x += io.MousePos.x - after.x;
+            g_canvas.pan.y += io.MousePos.y - after.y;
+        }
+        if (g_canvas.selected > 0 && ImGui::IsKeyPressed(ImGuiKey_Delete) && !io.WantTextInput) {
+            const int id = g_canvas.selected;
+            RemoveLinksTo(s, id);
+            s.blocks.erase(std::remove_if(s.blocks.begin(), s.blocks.end(), [id](const Scenarios::Block& x) { return x.id == id; }), s.blocks.end());
+            g_canvas.selected = -1;
+            g_dirty = true;
+        }
+        Widgets::Text(dl, Theme::semibold, ImVec2(canvasMin.x + Px(14), canvasMax.y - Px(24)), Theme::kInkMuted,
+                      "колесо — масштаб · тяни пустое место — двигать · от кружка справа — стрелка · правый клик по блоку — настройки");
+
+        // палитра снизу
+        DrawPalette(dl, ImVec2(areaMin.x, areaMax.y - Px(80)), width, Px(76));
+        if (g_canvas.newStep >= 0) {
+            const Step step = static_cast<Step>(g_canvas.newStep);
+            ImDrawList* fg = ImGui::GetForegroundDrawList();
+            const ImVec2 m = io.MousePos;
+            const float w = kNodeWidth * g_canvas.zoom, h = Px(70) * g_canvas.zoom;
+            fg->AddRectFilled(ImVec2(m.x - Px(20), m.y - Px(16)), ImVec2(m.x - Px(20) + w, m.y - Px(16) + h), Theme::Surface(0.85f), Px(16) * g_canvas.zoom);
+            fg->AddRect(ImVec2(m.x - Px(20), m.y - Px(16)), ImVec2(m.x - Px(20) + w, m.y - Px(16) + h), StepColor(step).WithAlpha(0.9f), Px(16) * g_canvas.zoom, 0, Px(1.5f));
+            fg->AddText(Theme::semibold, Theme::semibold->LegacySize * g_canvas.zoom, ImVec2(m.x + Px(12), m.y - Px(4)), Theme::kInk, Scenarios::StepName(step));
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                if (m.x >= canvasMin.x && m.x <= canvasMax.x && m.y >= canvasMin.y && m.y <= canvasMax.y) {
+                    Scenarios::Block block = NewBlock(step);
+                    int maxId = 0;
+                    for (const auto& o : s.blocks) maxId = std::max(maxId, o.id);
+                    block.id = maxId + 1;
+                    const ImVec2 p = ToCanvas(origin, ImVec2(m.x - Px(20), m.y - Px(16)));
+                    block.x = std::round(p.x / 20.0f) * 20.0f, block.y = std::round(p.y / 20.0f) * 20.0f;
+                    // «и делаешь дальше»: новый блок сразу продолжает выделенный (или «Слушать», если стрелок ещё нет)
+                    const int from = g_canvas.selected >= 0 ? g_canvas.selected : (s.startNext.empty() ? kStartId : -1);
+                    if (from >= 0 && (from == kStartId || FindBlock(s, from))) NextOf(s, from).push_back(block.id);
+                    s.blocks.push_back(block);
+                    g_canvas.selected = block.id;
+                    g_dirty = true;
+                }
+                g_canvas.newStep = -1;
+            }
+        }
     }
 }
 
@@ -325,6 +679,7 @@ bool ScenariosPage::PollAdded() {
     if (!g_open) Open();
     g_selected = static_cast<int>(g_list.size()) - 1;
     g_chainAnim = 0.0f;
+    g_canvas.lastScenario = -1; // показать новый сценарий целиком
     return true;
 }
 
@@ -354,7 +709,7 @@ void ScenariosPage::Draw(ImVec2 screen, float top, float dt) {
 
     Widgets::Text(dl, Theme::hero, ImVec2(origin.x + margin + Px(4), origin.y + margin), Theme::kInk, "Сценарии");
     Widgets::Text(dl, Theme::semibold, ImVec2(origin.x + margin + Px(4), origin.y + margin + Px(40)), Theme::kInkMuted,
-        "скажи фразу — и Аня выполнит цепочку блоков по порядку");
+        "скажи фразу — и Аня выполнит блоки по стрелкам");
     if (Widgets::IconButton("##scenariosClose", ImVec2(origin.x + size.x - margin - Px(36), origin.y + margin), Px(36), Icon::Close)) Close();
 
     const float top2 = origin.y + margin + Px(72);
@@ -362,13 +717,7 @@ void ScenariosPage::Draw(ImVec2 screen, float top, float dt) {
     DrawList(dl, ImVec2(origin.x + margin, top2), listWidth, listHeight);
 
     const float left = origin.x + margin + listWidth + Px(24);
-    const float width = std::min(origin.x + size.x - margin - left, Px(760));
-    ImGui::SetCursorScreenPos(ImVec2(left, top2));
-    ImGui::BeginChild("##chain", ImVec2(origin.x + size.x - margin - left, origin.y + size.y - top2 - Px(8)), ImGuiChildFlags_None,
-        ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollWithMouse);
-    Widgets::SmoothScroll();
-    DrawEditor(width - Px(12));
-    ImGui::EndChild();
+    DrawEditor(ImVec2(left, top2), ImVec2(origin.x + size.x - margin, origin.y + size.y - margin)); // холст до правого и нижнего края
 
     ImGui::End();
     ImGui::PopStyleColor();

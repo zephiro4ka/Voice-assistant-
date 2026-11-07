@@ -365,6 +365,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int sho
         DevProbe::BeforeFrame();
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
+        DevProbe::HoldMouse();
         ImGui::NewFrame();
         Ui::Frame(std::min(ImGui::GetIO().DeltaTime, 0.05f), active);
         ImGui::Render();

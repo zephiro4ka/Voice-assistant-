@@ -5,6 +5,7 @@
 #include "Log.h"
 #include "Settings.h"
 #include "ProcessesPage.h"
+#include "ScenariosPage.h"
 #include "SettingsPage.h"
 #include "TextUtils.h"
 #include "Ui.h"
@@ -20,6 +21,8 @@
 #include <string>
 
 namespace {
+    ImVec2 g_mouse(0, 0);
+    bool g_holdMouse = false; // сценарий двигал мышь — держим её там, а не где настоящий курсор
     bool g_enabled = false;
     bool g_perf = false;
     std::deque<std::string> g_queue;
@@ -58,9 +61,10 @@ namespace {
             else SettingsPage::Open(std::atoi(arg.c_str()));
             return;
         }
+        if (cmd == "scenarios") { std::string arg; in >> arg; arg == "close" ? ScenariosPage::Close() : ScenariosPage::Open(); return; }
         if (cmd == "processes") { std::string arg; in >> arg; arg == "close" ? ProcessesPage::Close() : ProcessesPage::Open(); return; }
         if (cmd == "history") { std::string arg; in >> arg; Ui::SetHistory(arg == "on"); return; }
-        if (cmd == "mouse") { float x = 0, y = 0; in >> x >> y; io.AddMousePosEvent(x, y); return; }
+        if (cmd == "mouse") { float x = 0, y = 0; in >> x >> y; io.AddMousePosEvent(x, y); g_mouse = ImVec2(x, y); g_holdMouse = true; return; }
         if (cmd == "down") { io.AddMouseButtonEvent(0, true); return; }   // зажать левую кнопку
         if (cmd == "up") { io.AddMouseButtonEvent(0, false); return; }    // отпустить
         if (cmd == "scroll") { float n = 0; in >> n; io.AddMouseWheelEvent(0, -n); return; }
@@ -80,6 +84,10 @@ namespace {
 void DevProbe::Start() {
     g_enabled = Config::Value("debug", "probe", "0") == "1";
     g_perf = Config::Value("debug", "perf", "0") == "1";
+}
+
+void DevProbe::HoldMouse() {
+    if (g_enabled && g_holdMouse) ImGui::GetIO().AddMousePosEvent(g_mouse.x, g_mouse.y);
 }
 
 void DevProbe::BeforeFrame() {

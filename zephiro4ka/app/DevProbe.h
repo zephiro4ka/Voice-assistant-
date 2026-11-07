@@ -14,6 +14,7 @@
 namespace DevProbe {
     void Start();
     void BeforeFrame();   // до ImGui::NewFrame — мышь и клавиши
+    void HoldMouse();     // после ImGui_ImplWin32_NewFrame — мышь из сценария главнее настоящего курсора
     void AfterRender();   // после отрисовки, до Present — снимок
     void FrameTime(double workMs, double intervalMs);
 }

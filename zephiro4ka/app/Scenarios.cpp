@@ -16,6 +16,7 @@
 #include <shellapi.h>
 
 #include <algorithm>
+#include <functional>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -77,8 +78,10 @@ namespace {
     json ToJson(const Scenarios::Scenario& s) {
         json blocks = json::array();
         for (const auto& b : s.blocks)
-            blocks.push_back({ { "step", static_cast<int>(b.step) }, { "text", b.text }, { "monitor", b.monitor }, { "position", b.position }, { "number", b.number } });
-        return { { "name", s.name }, { "phrase", s.phrase }, { "enabled", s.enabled }, { "blocks", blocks } };
+            blocks.push_back({ { "step", static_cast<int>(b.step) }, { "text", b.text }, { "monitor", b.monitor }, { "position", b.position }, { "number", b.number },
+                               { "id", b.id }, { "x", b.x }, { "y", b.y }, { "next", b.next }, { "color", b.color }, { "title", b.title } });
+        return { { "name", s.name }, { "phrase", s.phrase }, { "enabled", s.enabled }, { "blocks", blocks },
+                 { "start", { { "x", s.startX }, { "y", s.startY }, { "next", s.startNext } } }, { "link_style", s.linkStyle } };
     }
 
     Scenarios::Scenario FromJson(const json& j) {
@@ -93,8 +96,25 @@ namespace {
             block.monitor = b.value("monitor", 1);
             block.position = b.value("position", 0);
             block.number = b.value("number", 0);
+            block.id = b.value("id", 0);
+            block.x = b.value("x", 0.0f);
+            block.y = b.value("y", 0.0f);
+            if (b.contains("next") && b["next"].is_array())
+                for (const auto& n : b["next"]) if (n.is_number_integer()) block.next.push_back(n.get<int>());
+            block.color = b.value("color", -1);
+            block.title = b.value("title", "");
             s.blocks.push_back(block);
         }
+        if (j.contains("start") && j["start"].is_object()) {
+            const auto& st = j["start"];
+            s.hasLayout = true;
+            s.startX = st.value("x", 0.0f);
+            s.startY = st.value("y", 0.0f);
+            if (st.contains("next") && st["next"].is_array())
+                for (const auto& n : st["next"]) if (n.is_number_integer()) s.startNext.push_back(n.get<int>());
+        }
+        s.linkStyle = std::clamp(j.value("link_style", 0), 0, 2);
+        Scenarios::Normalize(s);
         return s;
     }
 
@@ -115,7 +135,7 @@ namespace {
 std::vector<Scenarios::Scenario> Scenarios::Load() {
     std::lock_guard lock(g_mutex);
     std::ifstream in(File());
-    if (!in) return Example();
+    if (!in) { auto example = Example(); for (auto& e : example) Normalize(e); return example; }
     const json data = json::parse(in, nullptr, false);
     std::vector<Scenario> list;
     if (data.is_array())
@@ -130,7 +150,55 @@ void Scenarios::Save(const std::vector<Scenario>& scenarios) {
     std::ofstream(File()) << data.dump(2);
 }
 
-void Scenarios::Run(const Scenario& scenario) {
+void Scenarios::Normalize(Scenario& s) {
+    int maxId = 0;
+    for (const auto& b : s.blocks) maxId = std::max(maxId, b.id);
+    bool missing = false;
+    for (auto& b : s.blocks) if (b.id <= 0) { b.id = ++maxId; missing = true; }
+    if (s.hasLayout && !missing) return;
+    if (!s.hasLayout) { // цепочка → холст: слева направо, по три блока в ряд, связи по порядку
+        s.startX = 0, s.startY = 0;
+        s.startNext.clear();
+        for (size_t i = 0; i < s.blocks.size(); ++i) {
+            auto& b = s.blocks[i];
+            const int place = static_cast<int>(i) + 1;
+            b.x = static_cast<float>(place % 3) * 400.0f;
+            b.y = static_cast<float>(place / 3) * 240.0f;
+            b.next.clear();
+            if (i + 1 < s.blocks.size()) b.next.push_back(s.blocks[i + 1].id);
+        }
+        if (!s.blocks.empty()) s.startNext.push_back(s.blocks[0].id);
+        s.hasLayout = true;
+    }
+}
+
+std::vector<Scenarios::Block> Scenarios::Order(const Scenario& s) {
+    if (!s.hasLayout) return s.blocks;
+    std::vector<Block> out;
+    std::vector<int> seen;
+    auto find = [&](int id) -> const Block* {
+        for (const auto& b : s.blocks) if (b.id == id) return &b;
+        return nullptr;
+    };
+    std::function<void(const std::vector<int>&)> walk = [&](const std::vector<int>& ids) {
+        std::vector<const Block*> nodes;
+        for (int id : ids) if (const Block* b = find(id); b && std::find(seen.begin(), seen.end(), id) == seen.end()) nodes.push_back(b);
+        std::sort(nodes.begin(), nodes.end(), [](const Block* a, const Block* b) { return a->y < b->y || (a->y == b->y && a->x < b->x); });
+        for (const Block* b : nodes) {
+            if (std::find(seen.begin(), seen.end(), b->id) != seen.end()) continue; // по кругу не ходим
+            seen.push_back(b->id);
+            out.push_back(*b);
+            walk(b->next);
+        }
+    };
+    walk(s.startNext);
+    return out;
+}
+
+void Scenarios::Run(const Scenario& source) {
+    Scenario scenario = source;
+    Normalize(scenario);
+    scenario.blocks = Order(scenario); // по стрелкам холста
     std::thread([scenario] {
         Log::Write("сценарий «" + scenario.name + "»: старт");
         std::string lastApp; // для блока «Положение окна» без названия
