@@ -2,7 +2,7 @@
 ; Ставится в профиль пользователя: Аня хранит настройки рядом с программой, в Program Files ей писать нельзя.
 
 #ifndef AppVer
-  #define AppVer "1.3"
+  #define AppVer "1.3.1"
 #endif
 
 [Setup]

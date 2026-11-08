@@ -627,7 +627,7 @@ namespace {
         if (s_current < 0) s_current = std::clamp(std::atoi(Config::Value("search", "files", "0").c_str()), 0, 2);
         if (Widgets::Combo("##fileSearch", &s_current, kNames, 3, ControlWidth(w))) Config::SetValue("search", "files", std::to_string(s_current));
     }
-    constexpr const char* kVersion = "1.3";
+    constexpr const char* kVersion = "1.3.1";
     std::mutex g_updateMutex;
     std::string g_updateStatus;
     std::atomic<bool> g_updateChecking{ false };
