@@ -5,6 +5,7 @@
 #include "Log.h"
 #include "Settings.h"
 #include "ProcessesPage.h"
+#include "RemoteDesktop.h"
 #include "ScenariosPage.h"
 #include "SettingsPage.h"
 #include "TextUtils.h"
@@ -19,6 +20,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
 
 namespace {
     ImVec2 g_mouse(0, 0);
@@ -78,6 +80,14 @@ namespace {
         }
         if (cmd == "shot") { in >> g_shot; return; }
         if (cmd == "perf") { g_perf = true; return; }
+        if (cmd == "remote") { // поднять рабочий стол без телеграма — адрес в журнале
+            std::thread([] {
+                const auto r = RemoteDesktop::Start(Text::Trim(Config::Value("telegram", "token", "")), std::atoll(Config::Value("telegram", "owner", "").c_str()), [](const std::string& m) { Log::Write(m); });
+                Log::Write("devprobe: рабочий стол: " + (r.url.empty() ? r.error : r.url));
+            }).detach();
+            return;
+        }
+        if (cmd == "remote_stop") { RemoteDesktop::Stop(); return; }
         if (cmd == "ask") { std::string rest; std::getline(in, rest); Brain::Submit(Text::Trim(rest)); return; } // как будто сказали Ане
     }
 }

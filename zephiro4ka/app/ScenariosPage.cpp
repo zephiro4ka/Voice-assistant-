@@ -136,8 +136,8 @@ namespace {
     }
 
     void DrawList(ImDrawList* dl, ImVec2 pos, float width, float height) {
-        dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), IM_COL32(255, 255, 255, 8), Px(18));
-        dl->AddRect(pos, ImVec2(pos.x + width, pos.y + height), IM_COL32(255, 255, 255, 20), Px(18));
+        dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), Theme::Overlay(8), Px(18));
+        dl->AddRect(pos, ImVec2(pos.x + width, pos.y + height), Theme::Overlay(20), Px(18));
         float y = pos.y + Px(8);
         for (int i = 0; i < static_cast<int>(g_list.size()); ++i) {
             const ImVec2 a(pos.x + Px(8), y), b(pos.x + width - Px(8), y + Px(52));
@@ -147,7 +147,7 @@ namespace {
             const bool hovered = ImGui::IsItemHovered();
             ImGui::PopID();
             const bool on = i == g_selected;
-            if (on || hovered) dl->AddRectFilled(a, b, IM_COL32(255, 255, 255, on ? 22 : 12), Px(12));
+            if (on || hovered) dl->AddRectFilled(a, b, Theme::Overlay(on ? 22 : 12), Px(12));
             if (on) dl->AddRectFilled(ImVec2(a.x, a.y + Px(12)), ImVec2(a.x + Px(3), b.y - Px(12)), Theme::Accent().WithAlpha(1.0f), Px(2));
             const auto& s = g_list[i];
             Widgets::Text(dl, Theme::body, ImVec2(a.x + Px(14), a.y + Px(7)), s.enabled ? Theme::kInk : Theme::kInkMuted, s.name.c_str());
@@ -309,8 +309,8 @@ namespace {
             const float k = std::fmod(time * 0.35f + i * 0.5f, 1.0f);
             const float glow = std::sin(k * 3.1416f);
             const ImVec2 p = PointAt(pts, k);
-            dl->AddCircleFilled(p, thickness * 2.6f, IM_COL32(255, 255, 255, static_cast<int>(28 * glow * alpha)), 12);
-            dl->AddCircleFilled(p, thickness * 1.1f, IM_COL32(255, 255, 255, static_cast<int>(220 * glow * alpha)), 10);
+            dl->AddCircleFilled(p, thickness * 2.6f, Theme::Overlay(static_cast<int>(28 * glow * alpha)), 12);
+            dl->AddCircleFilled(p, thickness * 1.1f, Theme::Overlay(static_cast<int>(220 * glow * alpha)), 10);
         }
     }
 
@@ -342,7 +342,7 @@ namespace {
         const bool hovered = ImGui::IsItemHovered();
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImU32 tint = danger ? IM_COL32(255, 110, 110, 255) : Theme::kInk;
-        if (hovered) dl->AddRectFilled(a, b, danger ? IM_COL32(255, 90, 90, 26) : IM_COL32(255, 255, 255, 14), Px(10));
+        if (hovered) dl->AddRectFilled(a, b, danger ? IM_COL32(255, 90, 90, 26) : Theme::Overlay(14), Px(10));
         Widgets::DrawIcon(dl, icon, ImVec2(a.x + Px(16), (a.y + b.y) * 0.5f), Px(13), danger ? tint : (hovered ? Theme::kInk : Theme::kInkSoft));
         Widgets::Text(dl, Theme::semibold, ImVec2(a.x + Px(34), (a.y + b.y) * 0.5f - Theme::semibold->LegacySize * 0.55f), hovered || danger ? tint : Theme::kInkSoft, label);
         if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
@@ -352,7 +352,7 @@ namespace {
     void MenuDivider() {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         ImGui::Dummy(ImVec2(0, Px(6)));
-        ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + Px(3)), ImVec2(p.x + ImGui::GetContentRegionAvail().x, p.y + Px(3)), IM_COL32(255, 255, 255, 16), Px(1));
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + Px(3)), ImVec2(p.x + ImGui::GetContentRegionAvail().x, p.y + Px(3)), Theme::Overlay(16), Px(1));
         ImGui::Dummy(ImVec2(0, Px(4)));
     }
 
@@ -384,12 +384,12 @@ namespace {
             if (ImGui::InvisibleButton("##color", ImVec2(Px(24), Px(24)))) { b->color = kColors[i]; g_dirty = true; }
             const bool hovered = ImGui::IsItemHovered();
             ImGui::PopID();
-            s_hover[i] += ((hovered ? 1.0f : 0.0f) - s_hover[i]) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
+            s_hover[i] += ((hovered ? 1.0f : 0.0f) - s_hover[i]) * Theme::Ease(ImGui::GetIO().DeltaTime, 8.7f);
             const ImVec2 c(p.x + Px(12), p.y + Px(12));
             const ImU32 fill = kColors[i] < 0 ? StepColor(b->step).WithAlpha(1.0f) : Theme::FromRgb(kColors[i]).WithAlpha(1.0f);
             dl->AddCircleFilled(c, Px(8) + Px(2) * s_hover[i], fill, 24);
-            if (kColors[i] < 0) dl->AddCircle(c, Px(4), IM_COL32(255, 255, 255, 160), 16, Px(1.2f)); // «по типу блока»
-            if (b->color == kColors[i]) dl->AddCircle(c, Px(12), IM_COL32(255, 255, 255, 230), 24, Px(1.6f));
+            if (kColors[i] < 0) dl->AddCircle(c, Px(4), Theme::Overlay(160), 16, Px(1.2f)); // «по типу блока»
+            if (b->color == kColors[i]) dl->AddCircle(c, Px(12), Theme::Overlay(230), 24, Px(1.6f));
             if (hovered) ImGui::SetTooltip(kColors[i] < 0 ? "цвет по типу блока" : "свой цвет");
         }
         MenuDivider();
@@ -435,7 +435,7 @@ namespace {
         if (!start && !b) return false;
         const float z = g_canvas.zoom;
         float& shown = g_canvas.appear.try_emplace(id, 0.0f).first->second;
-        shown += (1.0f - shown) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
+        shown += (1.0f - shown) * Theme::Ease(ImGui::GetIO().DeltaTime, 6.2f);
         const float appear = 1.0f - std::pow(1.0f - shown, 3.0f);
 
         const ImVec2 pos = NodePos(s, id);
@@ -520,7 +520,7 @@ namespace {
             ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, Px(1));
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(Px(6), Px(4)));
             ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::SurfaceSolid());
-            ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(255, 255, 255, 26));
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Overlay(26));
             if (Widgets::BeginPopupAnimated(("##nodeMenu" + std::to_string(id)).c_str())) {
                 NodeMenu(s, id);
                 Widgets::EndPopupAnimated();
@@ -537,7 +537,7 @@ namespace {
         dl->AddRectFilled(a, b2, Theme::Surface(0.93f * appear), Px(16) * z);
         dl->AddRectFilledMultiColor(ImVec2(a.x + Px(1), a.y + Px(1)), ImVec2(b2.x - Px(1), a.y + Px(40) * z),
             color.WithAlpha(0.14f * appear), color.WithAlpha(0.06f * appear), IM_COL32(0, 0, 0, 0), IM_COL32(0, 0, 0, 0));
-        dl->AddRect(a, b2, inHovered && g_canvas.linkFrom >= 0 && g_canvas.linkFrom != id ? Theme::Accent().WithAlpha(0.9f) : IM_COL32(255, 255, 255, 26), Px(16) * z, 0, Px(1.2f));
+        dl->AddRect(a, b2, inHovered && g_canvas.linkFrom >= 0 && g_canvas.linkFrom != id ? Theme::Accent().WithAlpha(0.9f) : Theme::Overlay(26), Px(16) * z, 0, Px(1.2f));
         // порты
         dl->ChannelsSetCurrent(2);
         const ImU32 portColor = color.WithAlpha(appear);
@@ -546,14 +546,14 @@ namespace {
         if (!NextOf(s, id).empty() || outHovered) dl->AddCircleFilled(outP, portR * 0.45f, portColor, 12);
         if (!start && g_canvas.linkFrom >= 0 && g_canvas.linkFrom != id) { // тянем стрелку — подсказать, куда её можно отпустить
             dl->AddCircleFilled(inP, portR, Theme::Surface(1.0f), 16);
-            dl->AddCircle(inP, portR * (inHovered ? 1.3f : 1.0f), inHovered ? Theme::Accent().WithAlpha(1.0f) : IM_COL32(255, 255, 255, 90), 16, Px(2) * z);
+            dl->AddCircle(inP, portR * (inHovered ? 1.3f : 1.0f), inHovered ? Theme::Accent().WithAlpha(1.0f) : Theme::Overlay(90), 16, Px(2) * z);
         }
         return false;
     }
 
     void DrawPalette(ImDrawList* dl, ImVec2 pos, float width, float height) {
         dl->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height), Theme::Surface(0.92f), Px(18));
-        dl->AddRect(pos, ImVec2(pos.x + width, pos.y + height), IM_COL32(255, 255, 255, 22), Px(18));
+        dl->AddRect(pos, ImVec2(pos.x + width, pos.y + height), Theme::Overlay(22), Px(18));
         Widgets::Text(dl, Theme::semibold, ImVec2(pos.x + Px(16), pos.y + Px(8)), Theme::kInkMuted, "блоки — зажми и перетащи на холст");
         float x = pos.x + Px(12);
         const float y = pos.y + Px(30), h = height - Px(40);
@@ -571,7 +571,7 @@ namespace {
             if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, Px(4))) g_canvas.newStep = i;
             ImGui::PopID();
             const Theme::Color color = StepColor(step);
-            dl->AddRectFilled(a, b, hovered ? IM_COL32(255, 255, 255, 18) : IM_COL32(255, 255, 255, 8), h * 0.5f);
+            dl->AddRectFilled(a, b, hovered ? Theme::Overlay(18) : Theme::Overlay(8), h * 0.5f);
             dl->AddRect(a, b, color.WithAlpha(hovered ? 0.8f : 0.4f), h * 0.5f, 0, Px(1.2f));
             Widgets::DrawIcon(dl, StepIcon(step), ImVec2(a.x + Px(18), (a.y + b.y) * 0.5f), Px(12), color.WithAlpha(1.0f));
             Widgets::Text(dl, Theme::semibold, ImVec2(a.x + Px(32), (a.y + b.y) * 0.5f - Theme::semibold->LegacySize * 0.55f), Theme::kInk, name);
@@ -624,12 +624,12 @@ namespace {
 
         // фон холста: точки сетки
         dl->AddRectFilled(canvasMin, canvasMax, IM_COL32(0, 0, 0, 40), Px(18));
-        dl->AddRect(canvasMin, canvasMax, IM_COL32(255, 255, 255, 18), Px(18));
+        dl->AddRect(canvasMin, canvasMax, Theme::Overlay(18), Px(18));
         ImGui::PushClipRect(canvasMin, canvasMax, true); // одна обрезка — и для рисунка, и для мыши
         const float step = Px(24) * g_canvas.zoom;
         for (float gx = std::fmod(g_canvas.pan.x, step); gx < canvasSize.x; gx += step)
             for (float gy = std::fmod(g_canvas.pan.y, step); gy < canvasSize.y; gy += step)
-                dl->AddCircleFilled(ImVec2(canvasMin.x + gx, canvasMin.y + gy), Px(1.1f), IM_COL32(255, 255, 255, 22), 4);
+                dl->AddCircleFilled(ImVec2(canvasMin.x + gx, canvasMin.y + gy), Px(1.1f), Theme::Overlay(22), 4);
         if (s.blocks.empty())
             Widgets::Text(dl, Theme::semibold, ImVec2(canvasMin.x + Px(380), canvasMin.y + Px(60)), Theme::kInkMuted,
                           "перетащи блок снизу и соедини: тяни от кружка справа к следующему блоку");
@@ -714,7 +714,7 @@ namespace {
             g_canvas.zoomTarget = std::clamp(g_canvas.zoomTarget * (io.MouseWheel > 0 ? 1.12f : 1.0f / 1.12f), 0.5f, 1.6f);
         }
         if (std::fabs(g_canvas.zoomTarget - g_canvas.zoom) > 0.0005f) { // плавно доезжаем до нового масштаба
-            g_canvas.zoom += (g_canvas.zoomTarget - g_canvas.zoom) * std::min(1.0f, io.DeltaTime * 12.0f);
+            g_canvas.zoom += (g_canvas.zoomTarget - g_canvas.zoom) * Theme::Ease(io.DeltaTime, 7.4f);
             g_canvas.pan = ImVec2(g_canvas.anchorScreen.x - origin.x - g_canvas.anchorCanvas.x * g_canvas.zoom,
                                   g_canvas.anchorScreen.y - origin.y - g_canvas.anchorCanvas.y * g_canvas.zoom);
         }
@@ -803,7 +803,7 @@ bool ScenariosPage::Covers() { return g_open && g_anim > 0.97f; }
 float ScenariosPage::Visibility() { return g_anim; }
 
 void ScenariosPage::Draw(ImVec2 screen, float top, float dt) {
-    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * std::min(1.0f, dt * 14.0f);
+    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * Theme::Ease(dt, 8.7f);
     if (g_anim < 0.01f) return;
     const float ease = 1.0f - std::pow(1.0f - g_anim, 3.0f);
 

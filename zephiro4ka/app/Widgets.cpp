@@ -19,6 +19,23 @@ void Widgets::DrawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float s, ImU32 color
         dl->AddLine(ImVec2(c.x + s * x1, c.y + s * y1), ImVec2(c.x + s * x2, c.y + s * y2), color, width);
     };
     switch (icon) {
+    case Icon::Lock:
+        dl->AddRect(ImVec2(c.x - s * 0.36f, c.y - s * 0.05f), ImVec2(c.x + s * 0.36f, c.y + s * 0.48f), color, Px(2), 0, w);
+        dl->PathArcTo(ImVec2(c.x, c.y - s * 0.05f), s * 0.24f, 3.14159f, 6.28318f, 16);
+        dl->PathStroke(color, 0, w);
+        break;
+    case Icon::Book:
+        dl->AddRect(ImVec2(c.x - s * 0.42f, c.y - s * 0.4f), ImVec2(c.x + s * 0.42f, c.y + s * 0.4f), color, Px(2), 0, w);
+        line(0, -0.4f, 0, 0.4f, w);
+        line(-0.28f, -0.16f, -0.12f, -0.16f, w);
+        line(0.12f, -0.16f, 0.28f, -0.16f, w);
+        break;
+    case Icon::Download:
+        line(0, -0.46f, 0, 0.18f, w);
+        line(-0.26f, -0.06f, 0, 0.18f, w);
+        line(0.26f, -0.06f, 0, 0.18f, w);
+        line(-0.42f, 0.44f, 0.42f, 0.44f, w);
+        break;
     case Icon::Chat:
         dl->AddRect(ImVec2(c.x - s * 0.5f, c.y - s * 0.4f), ImVec2(c.x + s * 0.5f, c.y + s * 0.25f), color, Px(3), 0, w);
         line(-0.3f, 0.25f, -0.38f, 0.5f, w);
@@ -144,7 +161,7 @@ void Widgets::DrawIcon(ImDrawList* dl, Icon icon, ImVec2 c, float s, ImU32 color
 
 namespace {
     // Плавная анимация наведения для любого элемента: 0 — нет, 1 — мышь на нём
-    float HoverAnim(ImGuiID id, bool hovered, float speed = 16.0f) {
+    float HoverAnim(ImGuiID id, bool hovered, float speed = 10.0f) {
         static std::unordered_map<ImGuiID, float> s_hover;
         float& t = s_hover[id];
         t += ((hovered ? 1.0f : 0.0f) - t) * std::min(1.0f, ImGui::GetIO().DeltaTime * speed);
@@ -172,9 +189,9 @@ bool Widgets::IconButton(const char* id, ImVec2 pos, float size, Icon icon, bool
 }
 
 bool Widgets::BeginCombo(const char* id, const char* preview, float width, int flags) {
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(0, 0, 0, 70)); // поле — тёмная «таблетка»
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, IM_COL32(0, 0, 0, 95));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, IM_COL32(0, 0, 0, 110));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Paper() ? Theme::Overlay(14) : IM_COL32(0, 0, 0, 70)); // поле — «таблетка»: тёмная, а на бумаге светлая
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Paper() ? Theme::Overlay(22) : IM_COL32(0, 0, 0, 95));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Paper() ? Theme::Overlay(30) : IM_COL32(0, 0, 0, 110));
     ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(255, 255, 255, 12));
     ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::Background(1).Mix(Theme::Background(0), 0.6f).WithAlpha(0.98f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Px(12));
@@ -238,29 +255,34 @@ bool Widgets::Combo(const char* id, int* current, const char* const items[], int
 bool Widgets::Slider(const char* id, int* value, int min, int max, const char* format, float width) {
     char text[32];
     snprintf(text, sizeof(text), format, *value);
-    const float valueWidth = Px(56), height = Px(24);
+    const float valueWidth = Px(62), height = Px(28), knobR = Px(9), trackH = Px(6);
     const ImVec2 pos = ImGui::GetCursorScreenPos();
-    const float trackWidth = std::max(Px(60), width - valueWidth);
+    // ручка целиком внутри дорожки: 0% — ровно с левого края, 100% — с правого, середина значения — ровно посередине
+    const float trackLeft = std::floor(pos.x + knobR), trackWidth = std::floor(std::max(Px(60), width - valueWidth - knobR * 2));
     ImGui::InvisibleButton(id, ImVec2(width, height));
     const ImGuiID item = ImGui::GetItemID();
     const bool active = ImGui::IsItemActive();
     bool changed = false;
     if (active && max > min) {
-        const float k = std::clamp((ImGui::GetIO().MousePos.x - pos.x) / trackWidth, 0.0f, 1.0f);
+        const float k = std::clamp((ImGui::GetIO().MousePos.x - trackLeft) / trackWidth, 0.0f, 1.0f);
         const int next = min + static_cast<int>(std::lround(k * (max - min)));
         if (next != *value) { *value = next; changed = true; ImGui::MarkItemEdited(item); }
     }
     const float hover = HoverAnim(item, ImGui::IsItemHovered() || active);
-    const float k = max > min ? static_cast<float>(*value - min) / (max - min) : 0.0f;
+    const float k = max > min ? std::clamp(static_cast<float>(*value - min) / (max - min), 0.0f, 1.0f) : 0.0f;
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float cy = pos.y + height * 0.5f, track = Px(4);
-    dl->AddRectFilled(ImVec2(pos.x, cy - track * 0.5f), ImVec2(pos.x + trackWidth, cy + track * 0.5f), IM_COL32(0, 0, 0, 90), track);
-    dl->AddRectFilled(ImVec2(pos.x, cy - track * 0.5f), ImVec2(pos.x + trackWidth * k, cy + track * 0.5f), Theme::Accent().WithAlpha(0.85f), track);
-    const ImVec2 knob(pos.x + trackWidth * k, cy);
-    dl->AddCircleFilled(knob, Px(8) + Px(1.5f) * hover, IM_COL32(0, 0, 0, 60), 20); // тень ручки
-    dl->AddCircleFilled(knob, Px(7) + Px(1) * hover, IM_COL32(255, 255, 255, 240), 20);
+    const float cy = std::floor(pos.y + height * 0.5f) + 0.5f, knobX = std::round(trackLeft + trackWidth * k);
+    const ImVec2 a(trackLeft, cy - trackH * 0.5f), b(trackLeft + trackWidth, cy + trackH * 0.5f);
+    dl->AddRectFilled(a, b, Theme::Overlay(26), trackH * 0.5f);
+    if (knobX - a.x >= trackH) dl->AddRectFilled(a, ImVec2(knobX, b.y), Theme::Accent().WithAlpha(0.95f), trackH * 0.5f);
+    const float middle = std::round(trackLeft + trackWidth * 0.5f); // метка середины
+    dl->AddLine(ImVec2(middle, b.y + Px(4)), ImVec2(middle, b.y + Px(8)), Theme::Overlay(46), Px(1));
+    const float r = knobR - Px(1) + Px(1) * hover;
+    dl->AddCircleFilled(ImVec2(knobX, cy + Px(1)), r + Px(1.5f), IM_COL32(0, 0, 0, 55), 32);
+    dl->AddCircleFilled(ImVec2(knobX, cy), r, IM_COL32(255, 255, 255, 255), 32);
+    dl->AddCircle(ImVec2(knobX, cy), r - Px(2.5f), Theme::Accent().WithAlpha(0.95f), 32, Px(2));
     const float tw = TextSize(Theme::semibold, text).x;
-    Text(dl, Theme::semibold, ImVec2(pos.x + width - tw, cy - Theme::semibold->LegacySize * 0.5f), Theme::kInkSoft, text);
+    Text(dl, Theme::semibold, ImVec2(pos.x + width - tw, cy - Theme::semibold->LegacySize * 0.55f), Theme::kInkSoft, text);
     return changed;
 }
 
@@ -276,7 +298,7 @@ void Widgets::SmoothScroll(float* scrollTo) {
         target->second = std::clamp(target->second - io.MouseWheel * Px(140), 0.0f, max);
     if (scrollTo && *scrollTo >= 0.0f) { target->second = *scrollTo; *scrollTo = -1.0f; }
     target->second = std::clamp(target->second, 0.0f, max);
-    const float next = now + (target->second - now) * std::min(1.0f, io.DeltaTime * 12.0f); // мягкое торможение
+    const float next = now + (target->second - now) * Theme::Ease(io.DeltaTime, 7.4f); // мягкое торможение
     ImGui::SetScrollY(std::fabs(target->second - next) < 0.5f ? target->second : next);
     last = std::fabs(target->second - next) < 0.5f ? target->second : next;
 }
@@ -341,7 +363,7 @@ bool Widgets::Toggle(const char* id, ImVec2 pos, bool* value, ImU32 accent) {
 
     static std::unordered_map<ImGuiID, float> s_anim; // плавное движение «шарика»
     float& t = s_anim[ImGui::GetItemID()];
-    t += ((*value ? 1.0f : 0.0f) - t) * std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
+    t += ((*value ? 1.0f : 0.0f) - t) * Theme::Ease(ImGui::GetIO().DeltaTime, 8.7f);
 
     const ImVec4 on = ImGui::ColorConvertU32ToFloat4(accent);
     const ImVec4 off = ImGui::ColorConvertU32ToFloat4(IM_COL32(255, 255, 255, 30));

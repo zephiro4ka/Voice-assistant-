@@ -7,6 +7,7 @@
 #include "TextUtils.h"
 #include "Theme.h"
 #include "HomeLayout.h"
+#include "Logo.h"
 #include "SetupWizard.h"
 #include "Visuals.h"
 #include "Voice.h"
@@ -119,11 +120,11 @@ namespace {
     void DrawBrand(ImDrawList* dl, Mood mood) {
         const float pad = Px(22);
         const ImVec2 brand(pad, Px(14));
-        const std::string title = Text::ToUtf8(Text::LowerRu(Text::ToWide(Config::Get().assistant)));
-        Widgets::Text(dl, Theme::display, brand, Theme::kInk, title.c_str());
-        const float brandWidth = Widgets::TextSize(Theme::display, title.c_str()).x;
-        Widgets::Text(dl, Theme::semibold, ImVec2(brand.x + brandWidth + Px(4), brand.y - Px(2)),
-            Palette(1).WithAlpha(0.75f + 0.25f * std::sin(g_time * 2.0f)), "✦");
+        const float logoSize = Px(32), logoGap = Px(8);
+        Logo::Draw(dl, ImVec2(brand.x - Px(4), brand.y + (Theme::display->LegacySize - logoSize) * 0.5f), logoSize);
+        const char* title = "ASTRIX";
+        Widgets::Text(dl, Theme::display, ImVec2(brand.x + logoSize - Px(4) + logoGap, brand.y), Theme::kInk, title);
+        const float brandWidth = logoSize - Px(4) + logoGap + Widgets::TextSize(Theme::display, title).x;
 
         static const char* kMoodText[] = { "отдыхаю", "слушаю", "думаю", "говорю" };
         const char* label = kMoodText[static_cast<int>(mood)];
@@ -255,19 +256,19 @@ namespace {
         g_navMin = pos;
         g_navMax = ImVec2(pos.x + total, pos.y + height + Px(8) * scale);
         dl->AddRectFilled(g_navMin, g_navMax, Theme::Surface(0.6f), (g_navMax.y - g_navMin.y) * 0.5f);
-        dl->AddRect(g_navMin, g_navMax, IM_COL32(255, 255, 255, 14), (g_navMax.y - g_navMin.y) * 0.5f);
+        dl->AddRect(g_navMin, g_navMax, Theme::Overlay(14), (g_navMax.y - g_navMin.y) * 0.5f);
         HomeLayout::Report("nav", "меню", ImVec2(g_navMin.x - Px(6), g_navMin.y - Px(4)), ImVec2(g_navMax.x + Px(6), g_navMax.y + Px(4)), true);
 
         float x = pos.x + Px(4) * scale;
         float selectedX = x;
         for (int i = 0; i < selected; ++i) selectedX += widths[i];
         if (g_navX < 0) g_navX = selectedX, g_navW = widths[selected];
-        const float k = std::min(1.0f, dt * 14.0f);
+        const float k = Theme::Ease(dt, 8.7f);
         g_navX += (selectedX - g_navX) * k;
         g_navW += (widths[selected] - g_navW) * k;
         const ImVec2 hiMin(g_navX, pos.y + Px(4) * scale), hiMax(g_navX + g_navW, pos.y + Px(4) * scale + height);
-        dl->AddRectFilled(hiMin, hiMax, IM_COL32(255, 255, 255, 18), height * 0.5f);
-        dl->AddRect(hiMin, hiMax, IM_COL32(255, 255, 255, 22), height * 0.5f);
+        dl->AddRectFilled(hiMin, hiMax, Theme::Overlay(18), height * 0.5f);
+        dl->AddRect(hiMin, hiMax, Theme::Overlay(22), height * 0.5f);
 
         static float s_hover[kNavCount] = {};
         for (int i = 0; i < kCount; ++i) {
@@ -278,8 +279,8 @@ namespace {
             const bool clicked = ImGui::InvisibleButton("##tab", ImVec2(widths[i], height));
             const bool hovered = ImGui::IsItemHovered();
             ImGui::PopID();
-            s_hover[i] += ((hovered ? 1.0f : 0.0f) - s_hover[i]) * std::min(1.0f, dt * 16.0f);
-            if (s_hover[i] > 0.01f && i != selected) dl->AddRectFilled(a, b, IM_COL32(255, 255, 255, static_cast<int>(14 * s_hover[i])), height * 0.5f);
+            s_hover[i] += ((hovered ? 1.0f : 0.0f) - s_hover[i]) * Theme::Ease(dt, 9.9f);
+            if (s_hover[i] > 0.01f && i != selected) dl->AddRectFilled(a, b, Theme::Overlay(static_cast<int>(14 * s_hover[i])), height * 0.5f);
             if ((compact || !showText) && hovered) ImGui::SetTooltip("%s", tabs[i].label.c_str());
 
             const bool on = i == selected;
@@ -377,7 +378,7 @@ namespace {
         const bool typing = ImGui::GetIO().WantTextInput;
 
         dl->AddRectFilled(p, max, Theme::Surface(0.92f), Px(22));
-        dl->AddRect(p, max, typing ? Theme::Accent().WithAlpha(0.45f) : IM_COL32(255, 255, 255, 16), Px(22), 0, Px(1.0f));
+        dl->AddRect(p, max, typing ? Theme::Accent().WithAlpha(0.45f) : Theme::Overlay(16), Px(22), 0, Px(1.0f));
 
         // кнопка микрофона: градиент, кольца-волны, когда слушает
         const float mic = Px(44);
@@ -392,7 +393,7 @@ namespace {
         }
         Visuals::GradientRoundRect(dl, micPos, ImVec2(micPos.x + mic, micPos.y + mic), Px(16), ImVec2(micPos.x + mic * 0.25f, micPos.y + mic * 0.2f),
             Palette(0).Mix({ 255, 255, 255 }, 0.35f).WithAlpha(1.0f), Palette(1).WithAlpha(1.0f));
-        if (micHovered) dl->AddRect(micPos, ImVec2(micPos.x + mic, micPos.y + mic), IM_COL32(255, 255, 255, 120), Px(16), 0, Px(1.5f));
+        if (micHovered) dl->AddRect(micPos, ImVec2(micPos.x + mic, micPos.y + mic), Theme::Overlay(120), Px(16), 0, Px(1.5f));
         const bool busy = mood == Mood::Speaking || mood == Mood::Thinking;
         Widgets::DrawIcon(dl, busy ? Icon::Stop : Icon::Mic, micCenter, mic * (micHovered ? 0.48f : 0.44f), IM_COL32(18, 11, 29, 255));
 
@@ -455,8 +456,8 @@ namespace {
             const float w = Px(34) + Widgets::TextSize(Theme::semibold, c.label).x;
             const ImVec2 a(x, y - Px(5)), b(x + w, y - Px(5) + chipH);
             const bool on = c.state == 1;
-            dl->AddRectFilled(a, b, on ? Theme::Accent().WithAlpha(0.16f) : IM_COL32(255, 255, 255, 8), chipH * 0.5f);
-            dl->AddRect(a, b, on ? Theme::Accent().WithAlpha(0.35f) : IM_COL32(255, 255, 255, 18), chipH * 0.5f);
+            dl->AddRectFilled(a, b, on ? Theme::Accent().WithAlpha(0.16f) : Theme::Overlay(8), chipH * 0.5f);
+            dl->AddRect(a, b, on ? Theme::Accent().WithAlpha(0.35f) : Theme::Overlay(18), chipH * 0.5f);
             const ImU32 color = c.state == 2 ? Theme::kBad : on ? Theme::kInk : Theme::kInkMuted;
             Widgets::DrawIcon(dl, c.icon, ImVec2(a.x + Px(14), (a.y + b.y) * 0.5f), Px(12), color);
             Widgets::Text(dl, Theme::semibold, ImVec2(a.x + Px(24), (a.y + b.y) * 0.5f - Theme::semibold->LegacySize * 0.5f), color, c.label);
@@ -499,7 +500,7 @@ namespace {
 
     // ---------------------------------------------------------------- история
     void DrawHistory(const Layout& L, float dt) {
-        g_historyAnim += ((g_historyOpen ? 1.0f : 0.0f) - g_historyAnim) * std::min(1.0f, dt * 12.0f);
+        g_historyAnim += ((g_historyOpen ? 1.0f : 0.0f) - g_historyAnim) * Theme::Ease(dt, 7.4f);
         if (g_historyAnim < 0.01f) return;
 
         const float width = std::min(Px(400) * HomeLayout::Scale("history"), L.screen.x - Px(24));
@@ -596,7 +597,7 @@ void Ui::Frame(float dt, bool active) {
     backdrop.customColor = settings.animationColor >= 0;
     if (backdrop.customColor) backdrop.color = Theme::FromRgb(settings.animationColor);
     Visuals::DrawBackground(background, screen, dt, backdrop);
-    Visuals::DrawOrb(background, L.orbCenter, L.orbRadius, mood, g_time, dt);
+    if (page < 0.97f) Visuals::DrawOrb(background, L.orbCenter, L.orbRadius, mood, g_time, dt); // под страницами сфера не просвечивает
 
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(screen);

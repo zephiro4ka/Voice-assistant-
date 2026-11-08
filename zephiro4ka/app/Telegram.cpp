@@ -7,6 +7,7 @@
 #include "MediaNow.h"
 #include "Pc.h"
 #include "PowerMode.h"
+#include "RemoteDesktop.h"
 #include "Screen.h"
 #include "Settings.h"
 #include "Skills.h"
@@ -25,6 +26,7 @@
 #include <chrono>
 #include <ctime>
 #include <mutex>
+#include <optional>
 #include <thread>
 
 using nlohmann::json;
@@ -42,6 +44,15 @@ namespace {
     std::atomic<bool> g_solving{ false };
 
     // кнопки под полем ввода в телеграме
+    const char* kAskScreen = "📸 Ответ с экрана";
+    const char* kDesktop = "🖥 Рабочий стол";
+    const char* kLouder = "🔊 +";
+    const char* kQuieter = "🔉 −";
+    const char* kPowerOff = "⏻ Выключить";
+    constexpr const char* kKeyboardVersion = "3"; // поменялись кнопки — один раз убрать старые, даже без приветствия
+    std::string g_pultUrl; // адрес пульта; меняется при каждом запуске туннеля
+
+    // убранные с клавиатуры кнопки остаются командами и текстом
     const char* kScreen = "📸 Экран";
     const char* kSolve = "🧠 Реши с экрана";
     const char* kStatus = "📊 Состояние";
@@ -49,17 +60,16 @@ namespace {
     const char* kShowLock = "🔆 Показать экран блокировки"; // вместо «Блокировки», пока компьютер заблокирован
     const char* kPause = "⏯ Пауза";
     const char* kNext = "⏭ Дальше";
-    const char* kLouder = "🔊 Громче";
-    const char* kQuieter = "🔉 Тише";
     const char* kStandby = "🌙 Выключить (бот на связи)";
     const char* kWake = "☀ Включить";
-    const char* kPowerOff = "⏻ Выключить совсем";
+
+    // снимок экрана ждёт, пока владелец напишет задачу
+    struct PendingShot { std::vector<uint8_t> image; ULONGLONG at = 0; };
+    constexpr ULONGLONG kPendingShotMs = 15 * 60 * 1000;
+    std::optional<PendingShot> g_pendingShot;
 
     json Keyboard() {
-        return { { "keyboard", json::array({ json::array({ kScreen, kSolve }), json::array({ kStatus, PowerMode::IsLocked() ? kShowLock : kLock }),
-                                             json::array({ kPause, kNext, kLouder, kQuieter }), json::array({ kStandby, kWake }),
-                                             json::array({ kPowerOff }) }) },
-                 { "resize_keyboard", true }, { "is_persistent", true } };
+        return { { "remove_keyboard", true } }; // вместо кнопок — приложение в меню бота
     }
 
     struct Config_ { std::string token; long long owner; };
@@ -144,8 +154,15 @@ namespace {
         return Http::HttpsGet(kHost, Text::ToWide("/file/bot" + Current().token + "/" + path), 30000);
     }
 
+    bool ScreenAllowed(long long chat) {
+        if (Config::Value("privacy", "screen", "1") == "1") return true;
+        Reply(chat, "Снимки экрана выключены в настройках ASTRIX, раздел «Приватность».");
+        return false;
+    }
+
     // Снимок экрана → нейросеть → ответ (снимок отдельно, чтобы было видно, что она решала)
     void SolveScreen(long long chat, const std::string& question) {
+        if (!ScreenAllowed(chat)) return;
         if (g_solving.exchange(true)) { Reply(chat, "Я уже решаю — подожди немного"); return; }
         Reply(chat, "Смотрю на экран и думаю над задачей… 🧠 Сложную решаю внимательно — это займёт 1–3 минуты.");
         const auto shot = Screen::CaptureJpeg(0, 80);
@@ -156,6 +173,86 @@ namespace {
         else answer = Ai::Quiet(question.empty() ? "Реши задачу на этом снимке экрана." : question, Screen::Base64(forAi), true);
         Reply(chat, answer.empty() ? "Не получилось решить — нейросеть не ответила" : answer);
         g_solving = false;
+    }
+
+    // Шаг 1: снимок приходит владельцу, бот ждёт текст задачи
+    void AskAboutScreen(long long chat) {
+        if (!ScreenAllowed(chat)) return;
+        if (!Ai::CanSee()) { Reply(chat, "Нейросеть ещё не готова или у модели нет «глаз» (файла mmproj) — не могу прочитать экран."); return; }
+        auto image = Screen::CaptureJpeg(1280, 85);
+        const auto shot = Screen::CaptureJpeg(0, 80);
+        if (image.empty() || shot.empty()) { Reply(chat, "Не получилось снять экран"); return; }
+        {
+            std::lock_guard lock(g_mutex);
+            g_pendingShot = PendingShot{ std::move(image), GetTickCount64() };
+        }
+        Photo(chat, shot, "Что сделать с этим снимком? Напиши задачу следующим сообщением.");
+    }
+
+    // Шаг 2: задача пришла — отвечаем по тому самому снимку
+    void SolveShot(long long chat, std::vector<uint8_t> image, std::string task) {
+        if (g_solving.exchange(true)) { Reply(chat, "Я уже решаю — подожди немного"); return; }
+        Reply(chat, "Думаю над задачей… 🧠 Сложную решаю внимательно — это займёт 1–3 минуты.");
+        const std::string answer = Ai::Quiet(task, Screen::Base64(image), true);
+        Reply(chat, answer.empty() ? "Не получилось решить — нейросеть не ответила" : answer);
+        g_solving = false;
+    }
+
+    std::string PultUrl() {
+        std::lock_guard lock(g_mutex);
+        return g_pultUrl;
+    }
+
+    json PultButton(const std::string& url) {
+        return { { "inline_keyboard", json::array({ json::array({ { { "text", "📱 Открыть пульт" }, { "web_app", { { "url", url } } } } }) }) } };
+    }
+
+    void OpenPult(long long chat) {
+        const std::string url = PultUrl();
+        if (url.empty()) { Reply(chat, "📱 Пульт ещё запускается или выключен в настройках программы. Попробуй через полминуты."); return; }
+        Reply(chat, "Твой пульт 👇", PultButton(url));
+    }
+
+    // Пульт работает, пока включён бот: туннель упал — поднимаем новый и обновляем кнопку меню
+    void KeepPult(int generation) {
+        std::string shown, lastError;
+        auto pause = [&](int seconds) { for (int i = 0; i < seconds * 4 && generation == g_generation.load(); ++i) Sleep(250); };
+        while (generation == g_generation.load()) {
+            const auto c = Current();
+            const auto result = RemoteDesktop::Start(c.token, c.owner, nullptr);
+            if (generation != g_generation.load()) return;
+            if (!result.error.empty()) {
+                if (result.error != lastError) Log::Write("пульт: " + result.error);
+                lastError = result.error;
+                pause(60);
+                continue;
+            }
+            lastError.clear();
+            if (result.url != shown) {
+                const json answer = Call("setChatMenuButton", { { "chat_id", c.owner }, { "menu_button", { { "type", "web_app" }, { "text", "Пульт" }, { "web_app", { { "url", result.url } } } } } });
+                if (answer.is_object() && answer.value("ok", false)) shown = result.url;
+
+                // телефон может долго помнить старую кнопку меню — держим в чате одну свежую (без звука)
+                const std::string previous = Config::Value("telegram", "pult_message", "");
+                if (!previous.empty() && previous != "0") Call("deleteMessage", { { "chat_id", c.owner }, { "message_id", std::atoll(previous.c_str()) } });
+                Config::SetValue("telegram", "pult_message", "0");
+                if (Config::Value("telegram", "greet", "1") != "1") { // уведомления выключены — только кнопка меню, адрес всегда даст /pult
+                    std::lock_guard lock(g_mutex);
+                    g_pultUrl = result.url;
+                    pause(15);
+                    continue;
+                }
+                const json sent = Call("sendMessage", { { "chat_id", c.owner }, { "text", "📱 Пульт готов" }, { "disable_notification", true }, { "reply_markup", PultButton(result.url) } });
+                if (sent.is_object() && sent.value("ok", false)) {
+                    Config::SetValue("telegram", "pult_message", std::to_string(sent["result"].value("message_id", 0LL)));
+                    Log::Write("пульт: свежая кнопка в чате");
+                } else Log::Write("пульт: не получилось прислать кнопку");
+
+                std::lock_guard lock(g_mutex);
+                g_pultUrl = result.url;
+            }
+            pause(15);
+        }
     }
 
     // Красивая сводка: разделы, полоски загрузки, цветные температуры
@@ -197,10 +294,25 @@ namespace {
         auto is = [&](const char* button, const wchar_t* command) { return text == button || lower == command; };
 
         if (lower == L"/start" || lower == L"/help" || lower == L"помощь") {
-            Reply(chat, "Привет! Я " + Config::Get().assistant + " 💜 Кнопки внизу — быстрые действия. А ещё можно писать мне как дома: «открой стим», "
+            Reply(chat, "Привет! Я " + Config::Get().assistant + " 💜 Всё управление — в пульте: кнопка «Пульт» слева от поля ввода. А ещё можно писать мне как дома: «открой стим», "
                         "«громкость 30», «какая погода», «реши задачу» — или прислать фото задачи.", Keyboard());
+            OpenPult(chat);
             return;
         }
+        if (is(kAskScreen, L"/ask")) { std::thread(AskAboutScreen, chat).detach(); return; }
+        if (is(kDesktop, L"/desktop") || lower == L"/pult" || lower == L"пульт") { OpenPult(chat); return; }
+        if (text != kLouder && text != kQuieter && text != kPowerOff && text.rfind('/', 0) != 0 && !text.empty()) {
+            std::optional<PendingShot> shot;
+            {
+                std::lock_guard lock(g_mutex);
+                shot.swap(g_pendingShot);
+            }
+            if (shot && GetTickCount64() - shot->at < kPendingShotMs) {
+                std::thread(SolveShot, chat, std::move(shot->image), text).detach();
+                return;
+            }
+        }
+        if (is(kScreen, L"/screen") && !ScreenAllowed(chat)) return;
         if (is(kScreen, L"/screen")) { Photo(chat, Screen::CaptureJpeg(0, 85), ""); return; }
         if (is(kSolve, L"/solve") || (lower.find(L"реши") != std::wstring::npos && lower.find(L"экран") != std::wstring::npos)) {
             std::thread(SolveScreen, chat, std::string()).detach();
@@ -210,7 +322,7 @@ namespace {
         if (is(kLock, L"/lock")) { PowerMode::Lock(); return; } // ответ с новой кнопкой пришлёт OnLockChanged
         if (is(kShowLock, L"/showlock")) {
             PowerMode::Wake();
-            Reply(chat, "🔆 Включила экран — на нём экран блокировки. Войди в Windows за компьютером, и кнопка снова станет «🔒 Блокировка».");
+            Reply(chat, "🔆 Включила экран — на нём экран блокировки. Войди в Windows за компьютером.");
             return;
         }
         if (is(kPause, L"/pause")) { MediaNow::Control(MediaNow::Action::PlayPause); Reply(chat, "⏯"); return; }
@@ -221,7 +333,7 @@ namespace {
         if (is(kStandby, L"/off")) {
             PowerMode::Standby();
             Reply(chat, std::string("🌙 Экран выключен, звук тоже") + (Config::Value("telegram", "lock_on_standby", "0") == "1" ? ", компьютер заблокирован" : "") +
-                        ". Я на связи — нажми «☀ Включить», когда понадобится.");
+                        ". Я на связи — напиши /on, когда понадобится.");
             return;
         }
         if (is(kWake, L"/on")) { PowerMode::Wake(); Reply(chat, "☀ Включила экран и звук"); return; }
@@ -317,6 +429,7 @@ namespace {
             if (!greeted) { // один раз за запуск — показать кнопки (если не выключено в настройках)
                 greeted = true;
                 if (Config::Value("telegram", "greet", "1") == "1") Reply(c.owner, Config::Get().assistant + " запущена и на связи 💜", Keyboard());
+                Config::SetValue("telegram", "keyboard", kKeyboardVersion);
             }
             for (const auto& update : data["result"]) {
                 offset = std::max(offset, update.value("update_id", 0LL) + 1);
@@ -334,6 +447,8 @@ void Telegram::Reload() {
     const bool enabled = Config::Value("telegram", "enabled", "1") == "1";
     const int generation = ++g_generation;
     g_ready = false;
+    RemoteDesktop::Stop(); // токен или владелец могли смениться
+    { std::lock_guard lock(g_mutex); g_pultUrl.clear(); }
     {
         std::lock_guard lock(g_mutex);
         g_token = token;
@@ -341,7 +456,10 @@ void Telegram::Reload() {
         g_enabled = enabled && !token.empty() && owner != 0;
         g_status = !enabled ? "выключен" : token.empty() ? "нет токена бота" : owner == 0 ? "не указан ID владельца" : "подключаюсь…";
     }
-    if (enabled && !token.empty() && owner != 0) std::thread(Poll, generation).detach();
+    if (enabled && !token.empty() && owner != 0) {
+        std::thread(Poll, generation).detach();
+        if (Config::Value("telegram", "remote_desktop", "1") == "1") std::thread(KeepPult, generation).detach();
+    }
 }
 
 bool Telegram::Ready() { return g_ready.load(); }
@@ -363,9 +481,9 @@ bool Telegram::SendPhoto(const std::vector<uint8_t>& jpeg, const std::string& ca
 
 void Telegram::OnLockChanged(bool locked) {
     PowerMode::SetLocked(locked);
-    if (!Ready()) return;
+    if (!Ready() || Config::Value("telegram", "greet", "1") != "1") return; // уведомления выключены
     std::thread([locked] { // из оконной процедуры — сеть не ждём
-        Reply(Current().owner, locked ? "🔒 Компьютер заблокирован" : "🔓 Компьютер разблокирован", Keyboard());
+        Reply(Current().owner, locked ? "🔒 Компьютер заблокирован" : "🔓 Компьютер разблокирован");
     }).detach();
 }
 

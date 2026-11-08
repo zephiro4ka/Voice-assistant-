@@ -22,6 +22,13 @@ bool Autostart::Enabled() {
     return Command() == value; // запись есть и ведёт именно на эту Аню
 }
 
+void Autostart::Migrate() {
+    wchar_t value[1024] = {};
+    DWORD size = sizeof(value);
+    if (RegGetValueW(HKEY_CURRENT_USER, kRunKey, kValue, RRF_RT_REG_SZ, nullptr, value, &size) != ERROR_SUCCESS) return;
+    if (std::wstring(value).find(L"\\Anya.exe") != std::wstring::npos) Set(true);
+}
+
 void Autostart::Set(bool enabled) {
     HKEY key = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, kRunKey, 0, KEY_SET_VALUE, &key) != ERROR_SUCCESS) return;

@@ -1,6 +1,7 @@
 #include "HomeWidgets.h"
 
 #include "MediaNow.h"
+#include "Rates.h"
 #include "SystemMonitor.h"
 #include "TextUtils.h"
 #include "Theme.h"
@@ -47,9 +48,7 @@ namespace {
         const float lift = Px(2) * hover;
         min.y -= lift, max.y -= lift;
         dl->AddRectFilled(min, max, Fade(Theme::Surface(0.86f + 0.08f * hover), alpha), Px(kRadius));
-        dl->AddRectFilledMultiColor(ImVec2(min.x + Px(1), min.y + Px(1)), ImVec2(max.x - Px(1), min.y + Px(44)), IM_COL32(255, 255, 255, static_cast<int>(12 * alpha)),
-            IM_COL32(255, 255, 255, static_cast<int>(12 * alpha)), IM_COL32(255, 255, 255, 0), IM_COL32(255, 255, 255, 0)); // блик стекла
-        dl->AddRect(min, max, IM_COL32(255, 255, 255, static_cast<int>((14 + 18 * hover) * alpha)), Px(kRadius), 0, Px(1));
+        dl->AddRect(min, max, Theme::Overlay(static_cast<int>((14 + 18 * hover) * alpha)), Px(kRadius), 0, Px(1));
         return lift;
     }
 
@@ -72,7 +71,7 @@ namespace {
         Widgets::Text(dl, Theme::semibold, ImVec2(right - vw, pos.y), Fade(Theme::kInk, alpha), value.c_str());
 
         const float barY = pos.y + Theme::semibold->LegacySize + Px(6), barH = Px(5);
-        dl->AddRectFilled(ImVec2(pos.x, barY), ImVec2(pos.x + width, barY + barH), IM_COL32(255, 255, 255, static_cast<int>(16 * alpha)), barH);
+        dl->AddRectFilled(ImVec2(pos.x, barY), ImVec2(pos.x + width, barY + barH), Theme::Overlay(static_cast<int>(16 * alpha)), barH);
         const float fill = std::clamp(fraction, 0.0f, 1.0f) * width;
         if (fill > 1) {
             const Theme::Color a = Theme::Accent(), b = Theme::Accent().Mix({ 244, 114, 182 }, 0.6f);
@@ -133,7 +132,7 @@ namespace {
 
         // график загрузки за минуту
         const ImVec2 gMin(p.x, p.y + Px(2)), gMax(p.x + inner, p.y + graphH);
-        dl->AddRectFilled(gMin, gMax, IM_COL32(255, 255, 255, static_cast<int>(8 * alpha)), Px(8));
+        dl->AddRectFilled(gMin, gMax, Theme::Overlay(static_cast<int>(8 * alpha)), Px(8));
         if (s.hasGpu) Sparkline(dl, gMin, gMax, s.gpuHistory, Theme::Accent().Mix({ 244, 114, 182 }, 0.6f).WithAlpha(0.9f), alpha);
         Sparkline(dl, gMin, gMax, s.cpuHistory, Theme::Accent().WithAlpha(1.0f), alpha);
         p.y += graphH + Px(6);
@@ -182,7 +181,7 @@ namespace {
         if (t.duration > 0) {
             Approach(g_progress, static_cast<float>(t.position / t.duration), dt, 4.0f);
             const float w = inner - Px(110);
-            dl->AddRectFilled(ImVec2(p.x, barY + Px(13)), ImVec2(p.x + w, barY + Px(16)), IM_COL32(255, 255, 255, static_cast<int>(20 * alpha)), Px(2));
+            dl->AddRectFilled(ImVec2(p.x, barY + Px(13)), ImVec2(p.x + w, barY + Px(16)), Theme::Overlay(static_cast<int>(20 * alpha)), Px(2));
             dl->AddRectFilled(ImVec2(p.x, barY + Px(13)), ImVec2(p.x + w * std::clamp(g_progress, 0.0f, 1.0f), barY + Px(16)), Fade(Theme::Accent().WithAlpha(1.0f), alpha), Px(2));
         }
         const float size = Px(30);
@@ -192,6 +191,54 @@ namespace {
         if (Widgets::IconButton("##mediaPlay", ImVec2(x, barY), size, t.playing ? Icon::Pause : Icon::Play)) MediaNow::Control(MediaNow::Action::PlayPause);
         x -= size + Px(6);
         if (Widgets::IconButton("##mediaPrev", ImVec2(x, barY), size, Icon::Previous)) MediaNow::Control(MediaNow::Action::Previous);
+        return height;
+    }
+}
+
+namespace {
+    // ------------------------------------------------------------ «Курсы валют»
+    float g_ratesHover = 0;
+
+    std::string Money(double value) {
+        char text[32];
+        if (value < 100) { snprintf(text, sizeof(text), "%.2f", value); return text; }
+        snprintf(text, sizeof(text), "%.0f", value);
+        std::string out = text;
+        for (int at = static_cast<int>(out.size()) - 3; at > 0; at -= 3) out.insert(at, " ");
+        return out;
+    }
+
+    const char* UnitName(const std::string& base) { return base == "UZS" ? " сум" : base == "RUB" ? " руб" : base == "KZT" ? " тг" : ""; }
+
+    float RatesHeight() { return Px(kPad) * 2 + Px(26) + Px(27) * 3; }
+
+    float DrawRates(ImDrawList* dl, ImVec2 pos, float alpha) {
+        const auto data = Rates::Snapshot();
+        const float width = Px(kWidth), inner = width - Px(kPad) * 2, height = RatesHeight();
+        const float lift = Card(dl, pos, ImVec2(pos.x + width, pos.y + height), alpha, g_ratesHover);
+        ImVec2 p(pos.x + Px(kPad), pos.y + Px(kPad) - lift);
+        Widgets::Text(dl, Theme::semibold, p, Fade(Theme::kInk, alpha), "Курсы валют");
+        if (!data.base.empty()) {
+            const float w = Widgets::TextSize(Theme::semibold, data.base.c_str()).x;
+            Widgets::Text(dl, Theme::semibold, ImVec2(p.x + inner - w, p.y), Fade(Theme::kInkMuted, alpha), data.base.c_str());
+        }
+        p.y += Px(26);
+        if (!data.ready) {
+            Widgets::Text(dl, Theme::semibold, p, Fade(Theme::kInkMuted, alpha), "загружаю…");
+            return height;
+        }
+        for (const auto& item : data.items) {
+            Widgets::Text(dl, Theme::semibold, p, Fade(Theme::kInkSoft, alpha), item.code.c_str());
+            const std::string value = Money(item.value) + UnitName(data.base);
+            const float vw = Widgets::TextSize(Theme::semibold, value.c_str()).x;
+            Widgets::Text(dl, Theme::semibold, ImVec2(p.x + inner - vw, p.y), Fade(Theme::kInk, alpha), value.c_str());
+            if (item.change != 0) {
+                char change[32];
+                snprintf(change, sizeof(change), "%+.2f", item.change);
+                Widgets::Text(dl, Theme::semibold, ImVec2(p.x + Px(48), p.y), Fade(item.change > 0 ? IM_COL32(110, 231, 183, 255) : IM_COL32(251, 113, 133, 255), alpha), change);
+            }
+            p.y += Px(27);
+        }
         return height;
     }
 }
@@ -206,7 +253,11 @@ void HomeWidgets::Draw(ImDrawList* dl, float right, float top, float bottom, flo
     const float x = right - Px(kWidth) + (1.0f - ease) * Px(30); // выезжает справа
     float y = top;
     y += DrawSystem(dl, ImVec2(x, y), dt, ease) + Px(14);
-    if (y + Px(126) < bottom) y += DrawMedia(dl, ImVec2(x, y), dt, ease);
+    if (y + Px(126) < bottom) { const float media = DrawMedia(dl, ImVec2(x, y), dt, ease); y = media > 0 ? y + media : y - Px(14); }
     else y -= Px(14);
+    if (Rates::Enabled() && y + Px(14) + RatesHeight() < bottom) {
+        if (y > top) y += Px(14);
+        y += DrawRates(dl, ImVec2(x, y), ease);
+    }
     g_boundsMin = ImVec2(x, top), g_boundsMax = ImVec2(x + Px(kWidth), y);
 }

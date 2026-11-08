@@ -329,6 +329,15 @@ Launcher::Result Launcher::Show(const std::string& spokenName) {
     if (!match.pid) return {};
     const HWND window = MainWindow(windows, match.pid);
     if (!window) return {};
+    if (!IsWindowVisible(window)) { // всё спрятано в трей: среди скрытых окон есть служебные пустые (у Steam и других на Chromium)
+        std::wstring target; // повторный запуск сама программа превратит в показ своего настоящего окна
+        {
+            std::lock_guard lock(g_mutex);
+            if (const App* app = FindBest(g_apps, spokenName)) target = app->launchTarget;
+        }
+        if (!target.empty() && reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL)) > 32)
+            return { true, Text::ToUtf8(match.name) };
+    }
     BringToFront(window);
     return { true, Text::ToUtf8(match.name) };
 }

@@ -29,6 +29,14 @@ namespace Ai {
     bool LooksLikeTask(const std::string& prompt); // «реши», «найди x», уравнение, задача…
     bool CanSee(); // у модели есть «глаза» (файл mmproj рядом с моделью) — можно присылать картинки
 
+    // Профили ответов: 0 «Стандарт» — как задумано в программе, 1–3 готовые, 4 «Свой» — значения из [ai] в anya.ini
+    constexpr int kProfiles = 5;
+    const char* ProfileName(int index);
+    int Profile();
+    void SetProfile(int index);     // готовый профиль записывает свои значения; движок перезапускать не нужно
+    int TuningVersion();            // растёт, когда значения поменялись не из окна настроек
+    void ResetTuning();             // всё в [ai] — как при установке (движок надо перезапустить)
+
     std::vector<std::string> Models();   // найденные модели .gguf (полные пути)
     std::string ActiveModel();           // имя файла текущей модели
 }

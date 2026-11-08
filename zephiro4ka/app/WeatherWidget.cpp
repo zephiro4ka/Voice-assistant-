@@ -114,7 +114,7 @@ namespace {
         case Sky::Snow:
             Cloud(dl, up, s, a);
             for (int i = 0; i < 3; ++i)
-                dl->AddCircleFilled(ImVec2(c.x + (i - 1) * s * 0.2f, c.y + s * (i == 1 ? 0.36f : 0.28f)), s * 0.045f, Fade(IM_COL32(255, 255, 255, 255), a), 12);
+                dl->AddCircleFilled(ImVec2(c.x + (i - 1) * s * 0.2f, c.y + s * (i == 1 ? 0.36f : 0.28f)), s * 0.045f, Fade(Theme::Overlay(255), a), 12);
             break;
         case Sky::Thunder: {
             Cloud(dl, up, s, a, IM_COL32(170, 160, 200, 255));
@@ -140,7 +140,7 @@ namespace {
     void DrawHour(ImDrawList* dl, const Weather::HourView& h, ImVec2 p, ImVec2 size, bool current, bool past, bool compact, float a) {
         const float cx = p.x + size.x * 0.5f;
         if (current) {
-            dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), Fade(IM_COL32(255, 255, 255, 18), a), Px(12));
+            dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), Fade(Theme::Overlay(18), a), Px(12));
             dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), Theme::Palette(0).WithAlpha(0.55f * a), Px(12), 0, Px(1.2f));
         }
         const float dim = past ? 0.45f : 1.0f;
@@ -210,10 +210,10 @@ void WeatherWidget::Draw(ImDrawList* dl, float left, float centerY, float top, f
     g_boundsMin = min, g_boundsMax = ImVec2(left + mini.x, y + (w.ready ? mini.y : size.y));
 
     const bool hovered = hover && w.ready && ImGui::IsMouseHoveringRect(min, max, false);
-    g_open += ((hovered ? 1.0f : 0.0f) - g_open) * std::min(1.0f, dt * 10.0f);
+    g_open += ((hovered ? 1.0f : 0.0f) - g_open) * Theme::Ease(dt, 6.2f);
 
     dl->AddRectFilled(min, max, Theme::Surface(0.82f + 0.18f * ease), Px(20));
-    dl->AddRect(min, max, IM_COL32(255, 255, 255, static_cast<int>(14 + 14 * ease)), Px(20), 0, Px(1.0f));
+    dl->AddRect(min, max, Theme::Overlay(static_cast<int>(14 + 14 * ease)), Px(20), 0, Px(1.0f));
 
     const ImVec2 content(min.x + Px(kPad), min.y + Px(kPad));
     dl->PushClipRect(min, max, true);

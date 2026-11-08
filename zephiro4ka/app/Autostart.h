@@ -5,5 +5,6 @@
 namespace Autostart {
     bool Enabled();
     void Set(bool enabled);
+    void Migrate();     // программа переименована: автозапуск должен вести на новый файл
     constexpr const wchar_t* kFlag = L"--autostart";
 }

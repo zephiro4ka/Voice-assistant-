@@ -13,6 +13,7 @@ x64/
 # личные данные — НИКОГДА не выкладывать (токен бота, ID, контакты, сценарии)
 anya.ini
 scenarios.json
+pult.json
 devprobe.txt
 imgui.ini
 zephiro4ka/imgui.ini

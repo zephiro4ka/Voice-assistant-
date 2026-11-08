@@ -2,6 +2,7 @@
 
 #include "Browser.h"
 #include "Input.h"
+#include "FileSearch.h"
 #include "Launcher.h"
 #include "Messenger.h"
 #include "Pc.h"
@@ -771,6 +772,7 @@ std::optional<std::string> Skills::Handle(const std::string& command) {
     if (auto setting = ScenarioMaker::FindSetting(command)) return setting; // «где настройка …?» — показать и подсветить
     if (auto power = PhoneAndPower(Normalize(command))) return power;     // до погоды: «температура процессора» — не про погоду
     if (auto forecast = Weather::Answer(command)) return forecast;
+    if (auto file = FileSearch::Handle(command)) return file;             // до общего «найди …»
     if (auto search = TypeInSearch(command)) return search;               // до «найди …» и «напечатай …»
     if (auto link = OpenNthLink(Normalize(command))) return link;          // до «открой видео „название“»
     if (auto volume = ChangeVolume(Normalize(command))) return volume;     // до «громкость на 30» и клавиш громкости

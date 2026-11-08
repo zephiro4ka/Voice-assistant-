@@ -10,12 +10,19 @@
 #pragma comment(lib, "windowscodecs.lib")
 
 namespace {
-    // Пиксели монитора (BGRA, сверху вниз)
-    bool GrabMonitor(std::vector<uint8_t>& pixels, int& width, int& height) {
-        HMONITOR monitor = MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTOPRIMARY);
-        MONITORINFO info{ sizeof(info) };
-        if (!GetMonitorInfoW(monitor, &info)) return false;
-        const RECT r = info.rcMonitor;
+    std::vector<RECT> AllMonitors() {
+        std::vector<RECT> list;
+        EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR monitor, HDC, LPRECT, LPARAM param) -> BOOL {
+            MONITORINFO info{ sizeof(info) };
+            if (GetMonitorInfoW(monitor, &info)) reinterpret_cast<std::vector<RECT>*>(param)->push_back(info.rcMonitor);
+            return TRUE;
+        }, reinterpret_cast<LPARAM>(&list));
+        std::sort(list.begin(), list.end(), [](const RECT& a, const RECT& b) { return a.left < b.left; });
+        return list;
+    }
+
+    // Пиксели области экрана (BGRA, сверху вниз)
+    bool Grab(const RECT& r, bool withCursor, std::vector<uint8_t>& pixels, int& width, int& height) {
         width = r.right - r.left;
         height = r.bottom - r.top;
 
@@ -29,6 +36,16 @@ namespace {
         if (ok) {
             HGDIOBJ old = SelectObject(memory, bitmap);
             BitBlt(memory, 0, 0, width, height, screen, r.left, r.top, SRCCOPY | CAPTUREBLT);
+            if (withCursor) {
+                CURSORINFO cursor{ sizeof(cursor) };
+                ICONINFO icon{};
+                if (GetCursorInfo(&cursor) && (cursor.flags & CURSOR_SHOWING) && GetIconInfo(cursor.hCursor, &icon)) {
+                    DrawIconEx(memory, cursor.ptScreenPos.x - r.left - static_cast<int>(icon.xHotspot), cursor.ptScreenPos.y - r.top - static_cast<int>(icon.yHotspot),
+                        cursor.hCursor, 0, 0, 0, nullptr, DI_NORMAL);
+                    if (icon.hbmColor) DeleteObject(icon.hbmColor);
+                    if (icon.hbmMask) DeleteObject(icon.hbmMask);
+                }
+            }
             SelectObject(memory, old);
             pixels.assign(static_cast<uint8_t*>(bits), static_cast<uint8_t*>(bits) + static_cast<size_t>(width) * height * 4);
         }
@@ -37,13 +54,43 @@ namespace {
         ReleaseDC(nullptr, screen);
         return ok;
     }
+
+    bool GrabActive(std::vector<uint8_t>& pixels, int& width, int& height) {
+        HMONITOR monitor = MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO info{ sizeof(info) };
+        return GetMonitorInfoW(monitor, &info) && Grab(info.rcMonitor, false, pixels, width, height);
+    }
 }
+
+static std::vector<uint8_t> Encode(std::vector<uint8_t>& pixels, int width, int height, int maxWidth, int quality, bool fast = false);
 
 std::vector<uint8_t> Screen::CaptureJpeg(int maxWidth, int quality) {
     std::vector<uint8_t> pixels;
     int width = 0, height = 0;
-    if (!GrabMonitor(pixels, width, height)) return {};
+    if (!GrabActive(pixels, width, height)) return {};
+    return Encode(pixels, width, height, maxWidth, quality);
+}
 
+int Screen::MonitorCount() { return static_cast<int>(AllMonitors().size()); }
+
+bool Screen::Monitor(int index, MonitorArea& area) {
+    const auto list = AllMonitors();
+    if (index < 0 || index >= static_cast<int>(list.size())) return false;
+    const RECT r = list[index];
+    area = { r.left, r.top, r.right - r.left, r.bottom - r.top };
+    return true;
+}
+
+std::vector<uint8_t> Screen::CaptureMonitorJpeg(int index, int maxWidth, int quality) {
+    const auto list = AllMonitors();
+    if (index < 0 || index >= static_cast<int>(list.size())) return {};
+    std::vector<uint8_t> pixels;
+    int width = 0, height = 0;
+    if (!Grab(list[index], true, pixels, width, height)) return {};
+    return Encode(pixels, width, height, maxWidth, quality, true); // поток: скорость важнее идеального уменьшения
+}
+
+static std::vector<uint8_t> Encode(std::vector<uint8_t>& pixels, int width, int height, int maxWidth, int quality, bool fast) {
     ComScope com;
     Com<IWICImagingFactory> factory;
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)))) return {};
@@ -58,7 +105,7 @@ std::vector<uint8_t> Screen::CaptureJpeg(int maxWidth, int quality) {
     if (maxWidth > 0 && width > maxWidth && SUCCEEDED(factory->CreateBitmapScaler(&scaler))) {
         outWidth = maxWidth;
         outHeight = static_cast<UINT>(static_cast<double>(height) * maxWidth / width);
-        if (SUCCEEDED(scaler->Initialize(bitmap.p, outWidth, outHeight, WICBitmapInterpolationModeFant))) source = scaler.p;
+        if (SUCCEEDED(scaler->Initialize(bitmap.p, outWidth, outHeight, fast ? WICBitmapInterpolationModeLinear : WICBitmapInterpolationModeFant))) source = scaler.p;
     }
 
     Com<IStream> stream;

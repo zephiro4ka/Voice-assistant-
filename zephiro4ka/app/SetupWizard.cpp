@@ -107,9 +107,9 @@ void SetupWizard::Open() {
 bool SetupWizard::IsOpen() { return g_open || g_anim > 0.01f; }
 
 void SetupWizard::Draw(ImVec2 screen, float top, float dt) {
-    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * std::min(1.0f, dt * 10.0f);
+    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * Theme::Ease(dt, 6.2f);
     if (g_anim < 0.01f) return;
-    g_stepAnim += (1.0f - g_stepAnim) * std::min(1.0f, dt * 11.0f);
+    g_stepAnim += (1.0f - g_stepAnim) * Theme::Ease(dt, 6.8f);
     const float ease = 1.0f - std::pow(1.0f - g_anim, 3.0f);
     const float stepEase = 1.0f - std::pow(1.0f - g_stepAnim, 3.0f);
 
@@ -128,14 +128,14 @@ void SetupWizard::Draw(ImVec2 screen, float top, float dt) {
     const ImVec2 cardMax(card.x + width, card.y + height);
     dl->AddRectFilled(card, cardMax, Theme::Surface(0.97f), Px(26));
     dl->AddRectFilledMultiColor(ImVec2(card.x + Px(1), card.y + Px(1)), ImVec2(cardMax.x - Px(1), card.y + Px(70)),
-        IM_COL32(255, 255, 255, 16), IM_COL32(255, 255, 255, 16), IM_COL32(255, 255, 255, 0), IM_COL32(255, 255, 255, 0));
+        Theme::Overlay(16), Theme::Overlay(16), Theme::Overlay(0), Theme::Overlay(0));
     dl->AddRect(card, cardMax, Theme::Accent().WithAlpha(0.35f), Px(26), 0, Px(1.2f));
 
     // точки шагов
     for (int i = 0; i < kSteps; ++i) {
         const float r = i == g_step ? Px(4.5f) : Px(3.0f);
         dl->AddCircleFilled(ImVec2(cardMax.x - Px(30) - (kSteps - 1 - i) * Px(16), card.y + Px(34)), r,
-                            i <= g_step ? Theme::Accent().WithAlpha(1.0f) : IM_COL32(255, 255, 255, 50));
+                            i <= g_step ? Theme::Accent().WithAlpha(1.0f) : Theme::Overlay(50));
     }
 
     const float pad = Px(32), inner = width - pad * 2;

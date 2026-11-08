@@ -1,4 +1,5 @@
 #include "Visuals.h"
+#include "CozyArt.h"
 
 #include "Graphics.h"
 #include "Wallpaper.h"
@@ -264,6 +265,7 @@ namespace {
 }
 
 void Visuals::DrawBackground(ImDrawList* dl, ImVec2 size, float dt, const BackdropOptions& o) {
+    if (Theme::Cozy()) { CozyArt::Background(dl, size, Theme::CozyPattern()); return; }
     const float step = o.animate ? dt * o.speed : 0.0f;
     g_backdropTime += step;
     const float t = g_backdropTime;
@@ -290,6 +292,7 @@ void Visuals::DrawBackground(ImDrawList* dl, ImVec2 size, float dt, const Backdr
 }
 
 void Visuals::DrawOrb(ImDrawList* dl, ImVec2 center, float radius, Mood mood, float t, float dt) {
+    if (Theme::Cozy()) { CozyArt::Orb(dl, center, radius, t); return; }
     const float target = TargetEnergy(mood, t);
     g_energy += (target - g_energy) * std::min(1.0f, dt * (target > g_energy ? 14.0f : 5.0f));
     g_spin += dt * (mood == Mood::Thinking ? 2.4f : 0.3f + g_energy * 0.6f);

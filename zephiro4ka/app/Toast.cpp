@@ -24,7 +24,7 @@ void Toast::Ask(const std::string& text, std::function<void()> onYes, const std:
 }
 
 void Toast::Draw(ImVec2 screen, float dt) {
-    g_anim += ((g_shown ? 1.0f : 0.0f) - g_anim) * std::min(1.0f, dt * 10.0f);
+    g_anim += ((g_shown ? 1.0f : 0.0f) - g_anim) * Theme::Ease(dt, 6.2f);
     if (g_anim < 0.01f) return;
     const float ease = 1.0f - std::pow(1.0f - g_anim, 3.0f);
 

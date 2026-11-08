@@ -27,7 +27,7 @@
     <ClInclude Include="Resource.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
-    <ClInclude Include="zephiro4ka.h">
+    <ClInclude Include="ASTRIX.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
     <ClInclude Include="ImGui\imconfig.h">
@@ -149,7 +149,7 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="zephiro4ka.cpp">
+    <ClCompile Include="ASTRIX.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
     <ClCompile Include="ImGui\imgui.cpp">
@@ -241,15 +241,12 @@
     <ResourceCompile Include="Version.rc">
       <Filter>Файлы ресурсов</Filter>
     </ResourceCompile>
-    <ResourceCompile Include="zephiro4ka.rc">
+    <ResourceCompile Include="ASTRIX.rc">
       <Filter>Файлы ресурсов</Filter>
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
     <Image Include="small.ico">
-      <Filter>Файлы ресурсов</Filter>
-    </Image>
-    <Image Include="zephiro4ka.ico">
       <Filter>Файлы ресурсов</Filter>
     </Image>
   </ItemGroup>
@@ -488,6 +485,45 @@
     <ClCompile Include="app\Telegram.cpp">
       <Filter>Аня</Filter>
     </ClCompile>
+    <ClCompile Include="app\RemoteDesktop.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Pult.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Rates.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Logo.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\FileSearch.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\FileSearch.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Logo.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\CozyArt.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\CozyArt.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Rates.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Pult.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\RemoteDesktop.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\RemoteDesktopPage.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
     <ClInclude Include="app\Telegram.h">
       <Filter>Аня</Filter>
     </ClInclude>

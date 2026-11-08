@@ -149,7 +149,7 @@ namespace {
         const int bigSize = GetSystemMetricsForDpi(SM_CXICON, dpi);     // ("small" в заголовках Windows — макрос)
         const int smallSize = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
         const auto load = [&](int size) {
-            return reinterpret_cast<LPARAM>(LoadImageW(instance, MAKEINTRESOURCEW(IDI_ZEPHIRO4KA), IMAGE_ICON, size, size, LR_DEFAULTCOLOR));
+            return reinterpret_cast<LPARAM>(LoadImageW(instance, MAKEINTRESOURCEW(IDI_ASTRIX), IMAGE_ICON, size, size, LR_DEFAULTCOLOR));
         };
         SendMessageW(window, WM_SETICON, ICON_BIG, load(bigSize));
         SendMessageW(window, WM_SETICON, ICON_SMALL, load(smallSize));
@@ -257,7 +257,7 @@ namespace {
 
     HWND CreateMainWindow(HINSTANCE instance, WNDCLASSEXW& wc) {
         wc = { sizeof(wc), CS_CLASSDC, WndProc, 0, 0, instance,
-               LoadIconW(instance, MAKEINTRESOURCEW(IDI_ZEPHIRO4KA)), LoadCursorW(nullptr, IDC_ARROW),
+               LoadIconW(instance, MAKEINTRESOURCEW(IDI_ASTRIX)), LoadCursorW(nullptr, IDC_ARROW),
                nullptr, nullptr, L"AnyaWindow", LoadIconW(instance, MAKEINTRESOURCEW(IDI_SMALL)) };
         RegisterClassExW(&wc);
 
@@ -269,7 +269,7 @@ namespace {
         const int y = work.top + (work.bottom - work.top - height) / 2;
         // без «перенаправления» — кадр идёт через DirectComposition с прозрачностью
         // без WS_SYSMENU: иначе Windows рисует свои маленькие «свернуть/развернуть/закрыть» за нашими (рамка-«стекло» на всё окно)
-        return CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, wc.lpszClassName, Text::ToWide(Config::Get().assistant).c_str(), WS_OVERLAPPEDWINDOW & ~WS_SYSMENU, x, y, width, height,
+        return CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, wc.lpszClassName, L"ASTRIX - Voice assistant", WS_OVERLAPPEDWINDOW & ~WS_SYSMENU, x, y, width, height,
             nullptr, nullptr, instance, nullptr);
     }
 
@@ -289,6 +289,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int sho
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const std::wstring args = commandLine ? commandLine : L"";
     const bool autostart = args.find(Autostart::kFlag) != std::wstring::npos;
+    Autostart::Migrate(); // запись автозапуска от старого Anya.exe
     if (args.find(L"--clean-memory") != std::wstring::npos) return ProcessMonitor::CleanAsAdmin(); // окно UAC → только очистка ОЗУ
 
     // Аня уже запущена: ярлык «Выключить (Аня на связи)» передаёт ей команду, обычный запуск — показывает её окно

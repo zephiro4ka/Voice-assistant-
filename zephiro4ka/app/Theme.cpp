@@ -4,6 +4,7 @@
 #include "Settings.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 
 float Theme::dpi = 1.0f;
@@ -12,6 +13,9 @@ ImFont* Theme::semibold = nullptr;
 ImFont* Theme::display = nullptr;
 ImFont* Theme::hero = nullptr;
 ImFont* Theme::title = nullptr;
+ImU32 Theme::kInk = IM_COL32(244, 239, 250, 255);
+ImU32 Theme::kInkSoft = IM_COL32(244, 239, 250, 170);
+ImU32 Theme::kInkMuted = IM_COL32(244, 239, 250, 110);
 
 namespace {
     using Theme::Color;
@@ -27,6 +31,58 @@ namespace {
     Theme::LookColors g_look = { { 40, 9, 38 }, { 16, 3, 18 }, { 48, 15, 46 } };
     bool g_glass = true;
     bool g_plates = true;
+
+    struct FontFace { const char* name; const char* regular; const char* bold; };
+    constexpr FontFace kFaces[] = {
+        { "Системный (как в Windows)", "segoeui.ttf", "seguisb.ttf" }, { "Segoe UI", "segoeui.ttf", "seguisb.ttf" }, { "Consolas (как раньше)", "consola.ttf", "consolab.ttf" },
+        { "Bahnschrift", "bahnschrift.ttf", "bahnschrift.ttf" }, { "Calibri", "calibri.ttf", "calibrib.ttf" }, { "Trebuchet MS", "trebuc.ttf", "trebucbd.ttf" },
+        { "Verdana", "verdana.ttf", "verdanab.ttf" }, { "Georgia", "georgia.ttf", "georgiab.ttf" }, { "Times New Roman", "times.ttf", "timesbd.ttf" },
+        { "Comic Sans", "comic.ttf", "comicbd.ttf" }, { "От руки (Segoe Print)", "segoepr.ttf", "segoeprb.ttf" } };
+    constexpr int kFaceCount = static_cast<int>(sizeof(kFaces) / sizeof(kFaces[0]));
+    constexpr int kHandwriting = kFaceCount - 1;
+    int g_face = 0, g_fontScale = 100, g_cozyPattern = 0;
+    float g_systemDpi = 1.0f; // масштаб Windows; Theme::dpi — он же с учётом «Размера интерфейса»
+    bool g_cozyDark = false, g_paper = false;
+    bool g_cozy = false, g_optionsRead = false, g_fontsDirty = false;
+
+    std::string FontFileOf(const std::string& registryName) { // файл шрифта по его имени в Windows
+        char file[260] = {};
+        DWORD size = sizeof(file);
+        if (RegGetValueA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", registryName.c_str(), RRF_RT_REG_SZ, nullptr, file, &size) != ERROR_SUCCESS) return {};
+        const std::string name = file;
+        return name.find('\\') == std::string::npos ? name : std::string();
+    }
+
+    // Шрифт сообщений из настроек Windows
+    void SystemFont(std::string& regular, std::string& bold) {
+        NONCLIENTMETRICSA metrics{ sizeof(metrics) };
+        if (!SystemParametersInfoA(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0)) return;
+        const std::string face = metrics.lfMessageFont.lfFaceName;
+        const std::string plain = FontFileOf(face + " (TrueType)");
+        if (plain.empty()) return;
+        regular = plain;
+        std::string strong = FontFileOf(face + " Semibold (TrueType)");
+        if (strong.empty()) strong = FontFileOf(face + " Bold (TrueType)");
+        bold = strong.empty() ? plain : strong;
+    }
+
+    // «Размер текста» из специальных возможностей Windows
+    float SystemTextScale() {
+        DWORD value = 100, size = sizeof(value);
+        RegGetValueA(HKEY_CURRENT_USER, "Software\\Microsoft\\Accessibility", "TextScaleFactor", RRF_RT_REG_DWORD, nullptr, &value, &size);
+        return std::clamp(value / 100.0f, 1.0f, 1.6f);
+    }
+
+    void ReadOptions() {
+        if (g_optionsRead) return;
+        g_optionsRead = true;
+        g_face = std::clamp(std::atoi(Config::Value("look", "font", "0").c_str()), 0, kFaceCount - 1);
+        g_fontScale = std::clamp(std::atoi(Config::Value("look", "font_scale", "100").c_str()), 80, 120);
+        g_cozy = Config::Value("cozy", "enabled", "0") == "1";
+        g_cozyPattern = std::atoi(Config::Value("cozy", "pattern", "0").c_str());
+        g_cozyDark = Config::Value("cozy", "dark", "0") == "1";
+        g_fontsDirty = true;
+    }
 
     bool FileExists(const std::string& path) { return GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES; }
 
@@ -46,6 +102,7 @@ namespace {
     }
 
     void ApplyStyle() {
+        ImGui::GetStyle() = ImGuiStyle(); // масштаб не должен накапливаться при смене размера
         ImGuiStyle& s = ImGui::GetStyle();
         s.WindowRounding = 22.0f;
         s.ChildRounding = 14.0f;
@@ -104,19 +161,30 @@ Theme::Color Theme::Color::Mix(const Color& to, float t) const {
 float Theme::Px(float value) { return value * dpi; }
 
 void Theme::Init(float dpiScale) {
-    dpi = dpiScale;
+    g_systemDpi = dpiScale;
+    ReadOptions();
+    g_fontsDirty = false;
+    LoadFonts();
+}
+
+void Theme::LoadFonts() {
     ImGuiIO& io = ImGui::GetIO();
-    // моноширинный стиль: Consolas — обычный для текста, жирный для подписей и заголовков (есть в любой Windows, с кириллицей)
-    body = LoadFont("consola.ttf", Px(15.5f));
-    semibold = LoadFont("consolab.ttf", Px(13.5f));
-    title = LoadFont("consolab.ttf", Px(16.0f));
-    display = LoadFont("consolab.ttf", Px(22.0f));
-    hero = LoadFont("consolab.ttf", Px(32.0f));
-    if (!body) body = LoadFont("segoeui.ttf", Px(16.5f)); // запасной вариант — Segoe UI
-    if (!semibold) semibold = LoadFont("seguisb.ttf", Px(13.5f));
+    dpi = g_systemDpi * SystemTextScale() * g_fontScale / 100.0f; // весь интерфейс растёт вместе с текстом: блоки, отступы, значки
+    const FontFace& chosen = kFaces[g_face == 0 && g_cozy ? kHandwriting : g_face];
+    std::string regular = chosen.regular, bold = chosen.bold;
+    if (g_face == 0 && !g_cozy) SystemFont(regular, bold);
+    struct { const char* regular; const char* bold; } face{ regular.c_str(), bold.c_str() };
+    const float k = 1.14f; // текст крупнее, а блоки того же размера
+    body = LoadFont(face.regular, Px(15.5f * k));
+    semibold = LoadFont(face.bold, Px(13.5f * k));
+    title = LoadFont(face.bold, Px(16.0f * k));
+    display = LoadFont(face.bold, Px(22.0f * k));
+    hero = LoadFont(face.bold, Px(32.0f * k));
+    if (!body) body = LoadFont("segoeui.ttf", Px(15.5f * k)); // выбранного шрифта нет — Segoe UI
+    if (!semibold) semibold = LoadFont("seguisb.ttf", Px(13.5f * k));
     if (!title) title = semibold;
-    if (!display) display = LoadFont("bahnschrift.ttf", Px(22.0f));
-    if (!hero) hero = LoadFont("segoeuil.ttf", Px(30.0f));
+    if (!display) display = LoadFont("seguisb.ttf", Px(22.0f * k));
+    if (!hero) hero = LoadFont("seguisb.ttf", Px(32.0f * k));
     if (!body) body = io.Fonts->AddFontDefault();
     if (!semibold) semibold = body;
     if (!title) title = semibold;
@@ -169,6 +237,8 @@ Theme::Color Theme::AccentPreset(int index) {
 }
 
 void Theme::Apply(const Settings& s) {
+    ReadOptions();
+    if (g_fontsDirty) { g_fontsDirty = false; LoadFonts(); }
     g_accent = s.accent >= kAccentPresets ? FromRgb(s.accentColor) : AccentPreset(s.accent);
     g_look = LookPreset(static_cast<int>(s.look), s.lookColor);
     if (s.backgroundColor >= 0) { // свой цвет фона поверх темы
@@ -177,11 +247,37 @@ void Theme::Apply(const Settings& s) {
     }
     g_glass = s.glass;
     g_plates = s.buttonPlates;
+    g_paper = g_cozy && !g_cozyDark;
+    if (g_paper) {
+        g_look = { { 251, 245, 230 }, { 243, 232, 209 }, { 255, 251, 241 } };
+        g_accent = g_accent.Mix({ 120, 70, 45 }, 0.45f); // на бумаге нужен цвет чернил поглубже
+        g_glass = false;
+    } else if (g_cozy) { // ночная тетрадь: тёплый тёмный лист и мел
+        g_look = { { 42, 37, 46 }, { 28, 25, 33 }, { 54, 48, 58 } };
+        g_accent = g_accent.Mix({ 250, 205, 150 }, 0.45f);
+        g_glass = false;
+    }
+    kInk = g_paper ? IM_COL32(58, 46, 38, 255) : IM_COL32(244, 239, 250, 255);
+    kInkSoft = g_paper ? IM_COL32(58, 46, 38, 195) : IM_COL32(244, 239, 250, 170);
+    kInkMuted = g_paper ? IM_COL32(58, 46, 38, 145) : IM_COL32(244, 239, 250, 110);
 
     ImVec4* c = ImGui::GetStyle().Colors;
     auto accent = [&](float a) { return ImGui::ColorConvertU32ToFloat4(g_accent.WithAlpha(a)); };
     c[ImGuiCol_WindowBg] = ImGui::ColorConvertU32ToFloat4(g_look.surface.WithAlpha(g_glass ? 0.94f : 1.0f)); // панель разговора
     c[ImGuiCol_PopupBg] = ImGui::ColorConvertU32ToFloat4(g_look.surface.Mix({ 0, 0, 0 }, 0.25f).WithAlpha(0.99f));
+    const ImVec4 ink = ImGui::ColorConvertU32ToFloat4(kInk);
+    c[ImGuiCol_Text] = ink;
+    c[ImGuiCol_TextDisabled] = ImVec4(ink.x, ink.y, ink.z, g_paper ? 0.58f : 0.40f);
+    c[ImGuiCol_Border] = g_paper ? ImVec4(0.3f, 0.2f, 0.12f, 0.16f) : ImVec4(1, 1, 1, 0.05f);
+    const float frame = g_paper ? 0.09f : 0.27f;
+    c[ImGuiCol_FrameBg] = c[ImGuiCol_Button] = ImVec4(0.25f * g_paper, 0.15f * g_paper, 0.05f * g_paper, frame);
+    c[ImGuiCol_FrameBgHovered] = ImVec4(0.25f * g_paper, 0.15f * g_paper, 0.05f * g_paper, frame + 0.06f);
+    c[ImGuiCol_FrameBgActive] = ImVec4(0.25f * g_paper, 0.15f * g_paper, 0.05f * g_paper, frame + 0.1f);
+    c[ImGuiCol_ButtonHovered] = g_paper ? ImVec4(0.25f, 0.15f, 0.05f, 0.16f) : ImVec4(1, 1, 1, 0.09f);
+    c[ImGuiCol_ButtonActive] = g_paper ? ImVec4(0.25f, 0.15f, 0.05f, 0.24f) : ImVec4(1, 1, 1, 0.14f);
+    c[ImGuiCol_ScrollbarGrab] = g_paper ? ImVec4(0.3f, 0.2f, 0.12f, 0.28f) : ImVec4(1, 1, 1, 0.12f);
+    c[ImGuiCol_ScrollbarGrabHovered] = g_paper ? ImVec4(0.3f, 0.2f, 0.12f, 0.4f) : ImVec4(1, 1, 1, 0.20f);
+    c[ImGuiCol_ScrollbarGrabActive] = g_paper ? ImVec4(0.3f, 0.2f, 0.12f, 0.5f) : ImVec4(1, 1, 1, 0.28f);
     c[ImGuiCol_Header] = accent(0.25f);
     c[ImGuiCol_HeaderHovered] = accent(0.35f);
     c[ImGuiCol_HeaderActive] = accent(0.45f);
@@ -194,5 +290,43 @@ void Theme::Apply(const Settings& s) {
 Theme::Color Theme::Accent() { return g_accent; }
 Theme::Color Theme::Background(int index) { return index == 0 ? g_look.top : g_look.bottom; }
 ImU32 Theme::SurfaceSolid() { return g_look.surface.WithAlpha(1.0f); }
-ImU32 Theme::Surface(float alpha) { return g_look.surface.WithAlpha(alpha * (g_glass ? 0.82f : 1.0f)); }
+ImU32 Theme::Surface(float alpha) { return g_look.surface.WithAlpha(g_cozy ? 1.0f : alpha * (g_glass ? 0.82f : 1.0f)); }
+ImU32 Theme::Overlay(int alpha) {
+    if (!g_paper || alpha >= 90) return IM_COL32(255, 255, 255, std::clamp(alpha, 0, 255)); // яркое — ручки, текст на кнопках — остаётся белым
+    return IM_COL32(70, 50, 30, std::clamp(alpha * 2, 0, 255));
+}
+
+int Theme::FontCount() { return kFaceCount; }
+const char* Theme::FontName(int index) { return kFaces[std::clamp(index, 0, kFaceCount - 1)].name; }
+int Theme::FontIndex() { ReadOptions(); return g_face; }
+int Theme::FontScale() { ReadOptions(); return g_fontScale; }
+
+void Theme::SetFont(int index, int scale) {
+    ReadOptions();
+    g_face = std::clamp(index, 0, kFaceCount - 1);
+    g_fontScale = std::clamp(scale, 80, 120);
+    Config::SetValue("look", "font", std::to_string(g_face));
+    Config::SetValue("look", "font_scale", std::to_string(g_fontScale));
+    g_fontsDirty = true;
+}
+
+bool Theme::Cozy() { ReadOptions(); return g_cozy; }
+bool Theme::CozyDark() { ReadOptions(); return g_cozyDark; }
+bool Theme::Paper() { return Cozy() && !g_cozyDark; }
+void Theme::SetCozyDark(bool on) {
+    ReadOptions();
+    g_cozyDark = on;
+    Config::SetValue("cozy", "dark", on ? "1" : "0");
+}
+int Theme::CozyPattern() { ReadOptions(); return g_cozyPattern; }
+
+void Theme::SetCozy(bool on, int pattern) {
+    ReadOptions();
+    if (on != g_cozy && g_face == 0) g_fontsDirty = true; // «автоматически» на бумаге — почерк
+    g_cozy = on;
+    g_cozyPattern = pattern;
+    Config::SetValue("cozy", "enabled", on ? "1" : "0");
+    Config::SetValue("cozy", "pattern", std::to_string(pattern));
+}
+
 bool Theme::ButtonPlates() { return g_plates; }

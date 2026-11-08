@@ -76,7 +76,7 @@ void Uninstall::RemoveEverything() {
         body += L"for ($i = 0; $i -lt 6 -and (Test-Path -LiteralPath $dir); $i++) {\r\n"
                 L"  Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue\r\n  Start-Sleep -Seconds 2\r\n}\r\n";
     } else { // общая папка (например, «Загрузки») — только свои файлы
-        for (const wchar_t* item : { L"Anya.exe", L"anya.ini", L"scenarios.json", L"anya.log", L"llama-server.log", L"devprobe.txt", L"models", L"third_party", L"llama.cpp" })
+        for (const wchar_t* item : { L"ASTRIX.exe", L"Anya.exe", L"anya.ini", L"scenarios.json", L"anya.log", L"llama-server.log", L"devprobe.txt", L"models", L"third_party", L"llama.cpp" })
             body += L"Remove-Item -LiteralPath (Join-Path $dir " + Quote(item) + L") -Recurse -Force -ErrorAction SilentlyContinue\r\n";
     }
     Log::Write("полное удаление программы");

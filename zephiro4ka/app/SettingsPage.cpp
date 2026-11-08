@@ -8,6 +8,13 @@
 #include "Telegram.h"
 #include "Wallpaper.h"
 #include "LocalAi.h"
+#include "CozyArt.h"
+#include "Http.h"
+#include "Json.h"
+#include "Platform.h"
+#include <shellapi.h>
+#include <filesystem>
+#include "Rates.h"
 #include "Settings.h"
 #include "TextUtils.h"
 #include "Theme.h"
@@ -27,26 +34,31 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <fstream>
+#include <unordered_map>
 
 using Theme::Px;
 using Widgets::Icon;
 
 namespace {
     // ---------------------------------------------------------------- разделы
-    enum Section { General, Appearance, VoiceSection, Hearing, AiSection, SearchSection, Overlay, WidgetsSection, Connections, Customization, kSections };
+    enum Section { General, Appearance, VoiceSection, Hearing, AiSection, SearchSection, Overlay, WidgetsSection, Connections, Privacy, Learning, SystemSection, Updates, kSections };
 
     struct SectionInfo { Icon icon; const char* name; const char* about; };
     const SectionInfo kInfo[kSections] = {
-        { Icon::User, "Общие", "Как тебя зовут и как Аня тебя слушает" },
-        { Icon::Sun, "Внешний вид", "Тема, любимый цвет и фон главного экрана" },
-        { Icon::Wave, "Голос", "Каким голосом и как быстро она говорит" },
-        { Icon::Mic, "Слух", "Когда фраза закончилась и на какие звуки реагировать" },
-        { Icon::Spark, "ИИ", "Характер и нейросеть для сложных вопросов" },
-        { Icon::Search, "Поиск", "Где искать то, что ты просишь найти" },
-        { Icon::Layers, "Оверлей", "Окно Ани поверх других программ" },
-        { Icon::Grid, "Виджеты", "Карточки на главном экране" },
-        { Icon::Phone, "Телефон и Discord", "Телеграм-бот для управления с телефона и статус в Discord" },
-        { Icon::Gear, "Полная кастомизация", "Свои места для любых блоков, сброс настроек и удаление программы" },
+        { Icon::User, "Общие", "Основные параметры программы" },
+        { Icon::Sun, "Интерфейс", "Темы, цвета, шрифты, анимации и оформление" },
+        { Icon::Wave, "Голос", "Выбор голоса, тембр, скорость речи и озвучивание" },
+        { Icon::Mic, "Распознавание", "Микрофон, прослушивание и распознавание речи" },
+        { Icon::Spark, "Интеллект", "Нейросеть, модель, память, контекст и параметры ИИ" },
+        { Icon::Search, "Поиск", "Браузер, поиск файлов и приложений" },
+        { Icon::Layers, "Оверлей", "Плавающие окна, положение и отображение помощника" },
+        { Icon::Grid, "Виджеты", "Управление дополнительными элементами интерфейса" },
+        { Icon::Phone, "Связь", "Discord, Telegram, телефон и внешние подключения" },
+        { Icon::Lock, "Приватность", "Разрешения, доступы и защита данных" },
+        { Icon::Book, "Обучение", "Персонализация поведения и предпочтений помощника" },
+        { Icon::Gear, "Система", "Автозапуск, производительность, системные параметры и полная кастомизация" },
+        { Icon::Download, "Обновления", "Обновление, информация о версии ASTRIX и удаление программы" },
     };
 
     bool g_open = false;
@@ -335,7 +347,7 @@ namespace {
             ImGui::PopTextWrapPos();
         }
     }
-    void DrawWallpaperDim(float w) { SliderSetting("##wallpaperDim", &Settings::wallpaperDim, 0, 90, w, "%d%%"); }
+    void DrawWallpaperDim(float w) { SliderSetting("##wallpaperDim", &Settings::wallpaperDim, 0, 100, w, "%d%%"); }
     void DrawAutoColors(float) {
         bool on = Config::Get().autoColors;
         if (Widgets::Toggle("##autoColors", ImGui::GetCursorScreenPos(), &on, Accent())) Wallpaper::ApplyAutoColors(on && Wallpaper::Loaded());
@@ -348,7 +360,14 @@ namespace {
             Config::Update([&](Settings& x) { x.backdrop = static_cast<Backdrop>(current); });
     }
 
-    void DrawBackdropSpeed(float w) { SliderSetting("##backdropSpeed", &Settings::backdropSpeed, 20, 300, w, "%d%%"); }
+    void DrawBackdropSpeed(float w) { // середина ползунка — обычная скорость
+        const int speed = Config::Get().backdropSpeed;
+        int position = speed <= 100 ? (speed - 20) * 50 / 80 : 50 + (speed - 100) * 50 / 200;
+        if (Widgets::Slider("##backdropSpeed", &position, 0, 100, "%d%%", ControlWidth(w))) {
+            const int value = position <= 50 ? 20 + position * 80 / 50 : 100 + (position - 50) * 200 / 50;
+            Config::Update([&](Settings& s) { s.backdropSpeed = value; }, false);
+        }
+    }
     void DrawAnimateInactive(float) { ToggleSetting("##animateInactive", &Settings::animateInactive); }
 
     // Свой цвет поверх автоматического: образец цвета (нажми — палитра) и «сбросить»
@@ -360,7 +379,7 @@ namespace {
         const bool hovered = ImGui::IsItemHovered();
         ImDrawList* dl = ImGui::GetWindowDrawList();
         dl->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), (value >= 0 ? Theme::FromRgb(value) : fallback).WithAlpha(1.0f), Px(8));
-        dl->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(255, 255, 255, hovered ? 90 : 40), Px(8));
+        dl->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), Theme::Overlay(hovered ? 90 : 40), Px(8));
         ImGui::SameLine();
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (size.y - ImGui::GetFrameHeight()) * 0.5f);
         if (value >= 0) {
@@ -397,7 +416,7 @@ namespace {
         int current = Config::Get().windowEffect;
                 if (Widgets::Combo("##windowEffect", &current, kNames, IM_ARRAYSIZE(kNames), ControlWidth(w))) Config::Update([&](Settings& x) { x.windowEffect = current; });
     }
-    void DrawWindowOpacity(float w) { SliderSetting("##windowOpacity", &Settings::windowOpacity, 20, 100, w, "%d%%"); }
+    void DrawWindowOpacity(float w) { SliderSetting("##windowOpacity", &Settings::windowOpacity, 0, 100, w, "%d%%"); }
 
     // ---------------------------------------------------------------- телеграм и Discord (раздел anya.ini, не Settings)
     void IniToggle(const char* id, const char* section, const char* key, const char* fallback, void (*reload)()) {
@@ -433,6 +452,7 @@ namespace {
         IniText("##owner", g_owner, sizeof(g_owner), "telegram", "owner", "твой ID в телеграме", w, Telegram::Reload, ImGuiInputTextFlags_CharsDecimal);
     }
     void DrawGreet(float) { IniToggle("##greet", "telegram", "greet", "1", [] {}); }
+    void DrawRemoteDesktop(float) { IniToggle("##remoteDesktop", "telegram", "remote_desktop", "1", Telegram::Reload); }
     void DrawLockOnStandby(float) { IniToggle("##lockOnStandby", "telegram", "lock_on_standby", "0", Telegram::Reload); }
     void DrawDiscord(float) { IniToggle("##discord", "discord", "enabled", "0", DiscordRpc::Reload); }
     void DrawDiscordApp(float w) {
@@ -498,7 +518,7 @@ namespace {
             s_text = Uninstall::SafeToDeleteFolder()
                 ? "Будет удалена папка программы со ВСЕМИ данными — настройки, токен бота, сценарии, журналы, голоса и нейросеть, "
                   "если они лежат в ней:\n\n" + folder + "\n\nАвтозапуск тоже отключится. Программа закроется."
-                : "Программа лежит в общей папке, поэтому удалю только её файлы (Anya.exe, настройки, сценарии, журналы, модели):\n\n" + folder +
+                : "Программа лежит в общей папке, поэтому удалю только её файлы (ASTRIX.exe, настройки, сценарии, журналы, модели):\n\n" + folder +
                   "\n\nАвтозапуск тоже отключится. Программа закроется.";
         }
         if (!ImGui::IsPopupOpen("##confirmRemove")) s_text.clear();
@@ -509,13 +529,183 @@ namespace {
     void DrawBackHome(float) { TimeSetting("##backHome", g_backHome, sizeof(g_backHome), "back_home", "15:10"); }
 
     // inlineControl — переключатель справа от названия, а не под ним
+    // ---- тонкая настройка нейросети
+    std::unordered_map<std::string, int> g_aiValues; // не читать anya.ini каждый кадр
+    int g_aiSeen = -1;
+    char g_aiExtra[480] = "", g_aiArgs[480] = "", g_aiAbout[480] = "";
+
+    int& AiCached(const char* key, const char* fallback) {
+        if (g_aiSeen != Ai::TuningVersion()) { // профиль сменили (в том числе с телефона)
+            g_aiSeen = Ai::TuningVersion();
+            g_aiValues.clear();
+            Copy(g_aiExtra, Config::Value("ai", "extra_prompt", ""));
+            Copy(g_aiArgs, Config::Value("ai", "engine_args", ""));
+            Copy(g_aiAbout, Config::Value("ai", "about_me", ""));
+        }
+        const auto it = g_aiValues.find(key);
+        if (it != g_aiValues.end()) return it->second;
+        return g_aiValues[key] = std::atoi(Config::Value("ai", key, fallback).c_str());
+    }
+
+    void AiSlider(const char* key, const char* fallback, int min, int max, float w, const char* format, bool sampling) {
+        int& value = AiCached(key, fallback);
+        const std::string id = std::string("##ai_") + key;
+        if (Widgets::Slider(id.c_str(), &value, min, max, format, ControlWidth(w))) {
+            Config::SetValue("ai", key, std::to_string(value));
+            if (sampling && Ai::Profile() != Ai::kProfiles - 1) { // тронули ползунок — значит, это уже свой профиль
+                Config::SetValue("ai", "profile", std::to_string(Ai::kProfiles - 1));
+                g_aiValues.erase("profile");
+            }
+        }
+    }
+
+    void DrawAiProfile(float w) {
+        const char* names[Ai::kProfiles];
+        for (int i = 0; i < Ai::kProfiles; ++i) names[i] = Ai::ProfileName(i);
+        int current = Ai::Profile();
+        AiCached("profile", "0");
+        if (Widgets::Combo("##aiProfile", &current, names, Ai::kProfiles, ControlWidth(w))) Ai::SetProfile(current);
+    }
+    void DrawChatTemp(float w) { AiSlider("chat_temp", "70", 0, 200, w, "%d%%", true); }
+    void DrawChatTopP(float w) { AiSlider("chat_top_p", "90", 0, 100, w, "%d%%", true); }
+    void DrawChatTopK(float w) { AiSlider("chat_top_k", "40", 0, 200, w, "%d", true); }
+    void DrawChatMinP(float w) { AiSlider("chat_min_p", "5", 0, 100, w, "%d%%", true); }
+    void DrawChatRepeat(float w) { AiSlider("chat_repeat", "100", 50, 150, w, "%d%%", true); }
+    void DrawChatTokens(float w) { AiSlider("chat_tokens", "600", 50, 4000, w, "%d", true); }
+    void DrawTaskTemp(float w) { AiSlider("task_temp", "60", 0, 200, w, "%d%%", true); }
+    void DrawTaskTopP(float w) { AiSlider("task_top_p", "95", 0, 100, w, "%d%%", true); }
+    void DrawTaskTopK(float w) { AiSlider("task_top_k", "20", 0, 200, w, "%d", true); }
+    void DrawTaskMinP(float w) { AiSlider("task_min_p", "5", 0, 100, w, "%d%%", true); }
+    void DrawTaskRepeat(float w) { AiSlider("task_repeat", "100", 50, 150, w, "%d%%", true); }
+    void DrawTaskTokens(float w) { AiSlider("task_tokens", "5000", 200, 16000, w, "%d", true); }
+    void DrawAiSeed(float w) { AiSlider("seed", "-1", -1, 9999, w, "%d", true); }
+    void DrawThinkMode(float w) {
+        static const char* kNames[] = { "только когда попросишь", "ещё и для задач", "никогда" };
+        int current = std::clamp(AiCached("think_mode", "0"), 0, 2);
+        if (Widgets::Combo("##thinkMode", &current, kNames, 3, ControlWidth(w))) {
+            Config::SetValue("ai", "think_mode", std::to_string(current));
+            AiCached("think_mode", "0") = current;
+        }
+    }
+    void DrawThinkSeconds(float w) { AiSlider("think_seconds", "10", 3, 300, w, "%d с", false); }
+    void AiTextField(const char* id, char* buffer, size_t size, const char* key, const char* hint, float w) {
+        AiCached("profile", "0"); // подхватить значение из файла
+        ImGui::SetNextItemWidth(ControlWidth(w));
+        ImGui::InputTextWithHint(id, hint, buffer, size);
+        if (ImGui::IsItemDeactivatedAfterEdit()) Config::SetValue("ai", key, Text::Trim(buffer));
+    }
+    void DrawExtraPrompt(float w) { AiTextField("##aiExtra", g_aiExtra, sizeof(g_aiExtra), "extra_prompt", "например: отвечай с лёгким сарказмом", w); }
+    void DrawGpuLayers(float w) { AiSlider("gpu_layers", "99", 0, 99, w, "%d", false); }
+    void DrawAiThreads(float w) { AiSlider("threads", "0", 0, 64, w, "%d", false); }
+    void DrawAiContext(float w) {
+        static const int kSizes[] = { 2048, 4096, 8192, 16384, 32768, 65536, 131072 };
+        static const char* kNames[] = { "2 048", "4 096", "8 192", "16 384", "32 768", "65 536", "131 072" };
+        int& value = AiCached("context", "16384");
+        int current = 3;
+        for (int i = 0; i < 7; ++i) if (kSizes[i] == value) current = i;
+        if (Widgets::Combo("##aiContext", &current, kNames, 7, ControlWidth(w))) {
+            value = kSizes[current];
+            Config::SetValue("ai", "context", std::to_string(value));
+        }
+    }
+    void DrawAiParallel(float w) { AiSlider("parallel", "2", 1, 4, w, "%d", false); }
+    void DrawAiVision(float) { IniToggle("##aiVision", "ai", "vision", "1", [] {}); }
+    void DrawEngineArgs(float w) { AiTextField("##aiArgs", g_aiArgs, sizeof(g_aiArgs), "engine_args", "например: --mlock", w); }
+    void DrawPrivacyScreen(float) { IniToggle("##privacyScreen", "privacy", "screen", "1", [] {}); }
+    void DrawClearLog(float) {
+        static float s_done = 0;
+        if (ImGui::Button("очистить журнал")) {
+            std::ofstream(std::filesystem::path(Text::ExecutableDirectory()) / "anya.log", std::ios::trunc);
+            s_done = static_cast<float>(ImGui::GetTime());
+        }
+        if (s_done > 0 && ImGui::GetTime() - s_done < 3) { ImGui::SameLine(); ImGui::TextDisabled("очищено"); }
+    }
+    void DrawAboutMe(float w) { AiTextField("##aboutMe", g_aiAbout, sizeof(g_aiAbout), "about_me", "например: учусь в колледже, люблю короткие ответы", w); }
+    void DrawFileSearch(float w) {
+        static const char* kNames[] = { "ASTRIX (по умолчанию)", "Поиск Windows", "Everything" };
+        static int s_current = -1;
+        if (s_current < 0) s_current = std::clamp(std::atoi(Config::Value("search", "files", "0").c_str()), 0, 2);
+        if (Widgets::Combo("##fileSearch", &s_current, kNames, 3, ControlWidth(w))) Config::SetValue("search", "files", std::to_string(s_current));
+    }
+    constexpr const char* kVersion = "1.3";
+    std::mutex g_updateMutex;
+    std::string g_updateStatus;
+    std::atomic<bool> g_updateChecking{ false };
+    void DrawUpdates(float) {
+        ImGui::TextUnformatted((std::string("ASTRIX ") + kVersion).c_str());
+        if (ImGui::Button(g_updateChecking.load() ? "проверяю…" : "проверить обновления") && !g_updateChecking.exchange(true))
+            std::thread([] {
+                const auto tag = Json::FindStrings(Http::HttpsGet(L"api.github.com", L"/repos/zephiro4ka/Voice-assistant-/releases/latest", 12000), "tag_name", 1);
+                std::lock_guard lock(g_updateMutex);
+                g_updateStatus = tag.empty() ? "не удалось проверить — нет связи с GitHub" : tag[0] == std::string("v") + kVersion ? "у тебя последняя версия" : "вышла версия " + tag[0];
+                g_updateChecking = false;
+            }).detach();
+        ImGui::SameLine();
+        if (ImGui::Button("страница релизов")) ShellExecuteW(nullptr, L"open", L"https://github.com/zephiro4ka/Voice-assistant-/releases/latest", nullptr, nullptr, SW_SHOWNORMAL);
+        std::lock_guard lock(g_updateMutex);
+        if (!g_updateStatus.empty()) ImGui::TextDisabled("%s", g_updateStatus.c_str());
+    }
+    void DrawCozy(float) {
+        bool on = Theme::Cozy();
+        if (Widgets::Toggle("##cozy", ImGui::GetCursorScreenPos(), &on, Accent())) Theme::SetCozy(on, Theme::CozyPattern());
+    }
+    void DrawCozyDark(float) {
+        bool on = Theme::CozyDark();
+        if (Widgets::Toggle("##cozyDark", ImGui::GetCursorScreenPos(), &on, Accent())) Theme::SetCozyDark(on);
+    }
+    void DrawCozyPattern(float w) {
+        const char* names[CozyArt::kPatterns];
+        for (int i = 0; i < CozyArt::kPatterns; ++i) names[i] = CozyArt::PatternName(i);
+        int current = std::clamp(Theme::CozyPattern(), 0, CozyArt::kPatterns - 1);
+        if (Widgets::Combo("##cozyPattern", &current, names, CozyArt::kPatterns, ControlWidth(w))) Theme::SetCozy(Theme::Cozy(), current);
+    }
+    void DrawFontFace(float w) {
+        std::vector<const char*> names;
+        for (int i = 0; i < Theme::FontCount(); ++i) names.push_back(Theme::FontName(i));
+        int current = Theme::FontIndex();
+        if (Widgets::Combo("##fontFace", &current, names.data(), Theme::FontCount(), ControlWidth(w))) Theme::SetFont(current, Theme::FontScale());
+    }
+    void DrawFontSize(float w) {
+        static int s_scale = -1;
+        if (s_scale < 0) s_scale = Theme::FontScale();
+        Widgets::Slider("##fontSize", &s_scale, 80, 120, "%d%%", ControlWidth(w));
+        if (ImGui::IsItemDeactivatedAfterEdit()) Theme::SetFont(Theme::FontIndex(), s_scale); // шрифты грузим, когда ползунок отпустили
+    }
+    void DrawAiPreload(float) { IniToggle("##aiPreload", "ai", "preload", "0", [] {}); }
+    void DrawGameUnload(float) { IniToggle("##gameUnload", "ai", "game_unload", "1", [] {}); }
+    void DrawRatesWidget(float) { IniToggle("##ratesWidget", "rates", "widget", "1", Rates::Reload); }
+    void DrawRatesCurrency(float w) {
+        static const char* kCodes[] = { "auto", "UZS", "RUB", "KZT", "BYN", "KGS", "TJS", "UAH", "AZN", "AMD", "GEL", "TRY", "NOK", "EUR", "USD" };
+        static const char* kNames[] = { "по городу из настроек", "UZS — сум", "RUB — рубль", "KZT — тенге", "BYN — белорусский рубль", "KGS — сом", "TJS — сомони", "UAH — гривна",
+                                        "AZN — манат", "AMD — драм", "GEL — лари", "TRY — лира", "NOK — норвежская крона", "EUR — евро", "USD — доллар" };
+        static int s_current = -1;
+        if (s_current < 0) {
+            s_current = 0;
+            const std::string now = Config::Value("rates", "currency", "auto");
+            for (int i = 0; i < IM_ARRAYSIZE(kCodes); ++i) if (now == kCodes[i]) s_current = i;
+        }
+        if (Widgets::Combo("##ratesCurrency", &s_current, kNames, IM_ARRAYSIZE(kNames), ControlWidth(w))) {
+            Config::SetValue("rates", "currency", kCodes[s_current]);
+            Rates::Reload();
+        }
+    }
+    void DrawAiApply(float) {
+        if (ImGui::Button("перезапустить нейросеть")) Ai::Restart();
+        ImGui::SameLine();
+        if (ImGui::Button("всё по умолчанию")) ImGui::OpenPopup("##confirmAiReset");
+        if (Confirm("##confirmAiReset", "Все настройки нейросети вернутся как при установке, и она перезапустится.", "вернуть", false, false)) {
+            Ai::ResetTuning();
+            Ai::Restart();
+        }
+    }
+
     struct Item { Section section; const char* title; const char* hint; void (*draw)(float width); bool inlineControl = false; };
     const Item kItems[] = {
         { General, "Имя помощницы", "Так она отзывается на голос и подписывается в окне, Discord и телеграме. Склоняю сама: «Лиза» → «с Лизой».", DrawAssistant },
         { General, "Как тебя зовут", "Так Аня пишет твоё имя на экране и в разговоре.", DrawName },
-        { General, "Как произносить имя вслух", "Ник не всегда читается красиво: например, «zephiro4ka» можно произносить как «Зефирочка».", DrawSpokenName },
+        { General, "Как произносить имя вслух", "Ник не всегда читается красиво: например, «Sasha_07» можно произносить как «Саша».", DrawSpokenName },
         { General, "Слушать всегда", "Аня ждёт слово «Аня». Выключи — тогда нажимай на сферу или пробел.", DrawWakeWord, true },
-        { General, "Запускать вместе с Windows", "Аня тихо стартует в трее, когда включаешь компьютер.", DrawAutostart, true },
+        { SystemSection, "Запускать вместе с Windows", "Аня тихо стартует в трее, когда включаешь компьютер.", DrawAutostart, true },
 
         { Appearance, "Эффект окна", "Как в Windows 11: сквозь Аню видно размытый фон. Акрил — заметнее, Mica — спокойнее.", DrawWindowEffect },
         { Appearance, "Плотность фона", "Насколько фон Ани закрывает эффект окна. Меньше — прозрачнее.", DrawWindowOpacity },
@@ -523,17 +713,22 @@ namespace {
         { Appearance, "Затемнение обоев", "Чтобы текст и сфера хорошо читались на яркой картинке.", DrawWallpaperDim },
         { Appearance, "Цвета по обоям", "Тема, любимый цвет и цвет анимации подбираются под картинку. Только в Ане — Windows не трогаю. "
                                        "Выключишь — вернутся прежние цвета.", DrawAutoColors, true },
+        { Appearance, "Домашний уют", "Бумага в клетку, рисунки от руки и нарисованная Аня вместо обоев и анимации.", DrawCozy, true },
+        { Appearance, "Тёмная тетрадь", "Тёмный вариант «Домашнего уюта»: ночной лист и рисунки мелом.", DrawCozyDark, true },
+        { Appearance, "Рисунки на листе", "Что нарисовано в тетради в формате «Домашний уют».", DrawCozyPattern },
+        { Appearance, "Шрифт", "Как выглядит весь текст программы.", DrawFontFace },
+        { Appearance, "Размер интерфейса", "Текст и блоки вместе: от 80% до 120%, посередине — обычный размер.", DrawFontSize },
         { Appearance, "Тема", "Цвет фона и панелей. «Своя» — любой цвет из палитры.", DrawLook },
         { Appearance, "Любимый цвет", "Этим цветом я крашу кнопки, переключатели и всё, что ты выбираешь, — и сферу, когда отдыхаю.", DrawAccent },
         { Appearance, "Фон", "Анимация на главном экране.", DrawBackdrop },
         { Appearance, "Скорость анимации", "Насколько быстро движется фон.", DrawBackdropSpeed },
-        { Appearance, "Анимировать в неактивном окне", "Выключено — пока ты в другом окне, фон замирает и видеокарта отдыхает. "
+        { SystemSection, "Анимировать в неактивном окне", "Выключено — пока ты в другом окне, фон замирает и видеокарта отдыхает. "
                                                      "Когда я слушаю или говорю, всё оживает само.", DrawAnimateInactive, true },
         { Appearance, "Цвет фона", "Свой цвет фона поверх темы.", DrawBackgroundColor },
         { Appearance, "Цвет анимации", "Без него фон переливается цветами моего настроения.", DrawAnimationColor },
         { Appearance, "Стекло", "Полупрозрачные панели вместо плотных.", DrawGlass, true },
         { Appearance, "Подложка под кнопками окна", "Подложка за кнопками «свернуть», «развернуть» и «закрыть». Без неё — только значки.", DrawPlates, true },
-        { Appearance, "Сворачивать в трей", "Крестик прячет меня в трей у часов — я продолжаю слушать. Выйти — правой кнопкой по значку.", DrawTray, true },
+        { SystemSection, "Сворачивать в трей", "Крестик прячет меня в трей у часов — я продолжаю слушать. Выйти — правой кнопкой по значку.", DrawTray, true },
 
         { VoiceSection, "Голос", "Silero звучит живее всех, Supertonic и голоса Windows — запасные.", DrawVoice },
         { VoiceSection, "Высота нейроголоса", "0 — естественно, без обработки.", DrawNeuralPitch },
@@ -543,10 +738,36 @@ namespace {
         { Hearing, "Пауза — конец фразы", "Меньше — отвечает быстрее, но может обрезать фразу на паузе.", DrawSilence },
         { Hearing, "Реакция на кашель и чих", "«Будь здоров!» на чих и «Всё в порядке? Не заболел?» на кашель.", DrawBodySounds, true },
 
-        { AiSection, "Характер", "Как Аня разговаривает. Можно написать свой характер.", DrawPersonality },
+        { Learning, "Характер", "Как Аня разговаривает. Можно написать свой характер.", DrawPersonality },
         { AiSection, "Освобождать видеокарту", "Если долго не спрашиваешь — нейросеть выгружается, и видеокарта свободна для игр. "
                                                "Первый ответ после этого — на 5–15 секунд дольше.", DrawAiIdle },
         { AiSection, "Нейросеть", "Модель .gguf для домашки и сложных вопросов. Работает прямо на компьютере.", DrawModel },
+        { AiSection, "Профиль ответов", "Стандарт, Быстро, Умно, Креативно или Свой. Меняется сразу и с пульта на телефоне.", DrawAiProfile },
+        { Learning, "Свои указания", "Добавляются к системному промпту: как отвечать, о чём помнить.", DrawExtraPrompt },
+        { AiSection, "Размышления", "Когда модель думает «про себя» перед ответом. Долго, зато точнее.", DrawThinkMode },
+        { AiSection, "Время на размышления", "Сколько модель может думать при голосовом ответе. Потом ответит сразу.", DrawThinkSeconds },
+        { AiSection, "Разговор: температура", "Выше — живее и неожиданнее, ниже — точнее и однообразнее.", DrawChatTemp },
+        { AiSection, "Разговор: top-p", "Какую долю вероятных слов рассматривать.", DrawChatTopP },
+        { AiSection, "Разговор: top-k", "Из скольких лучших слов выбирать. 0 — без ограничения.", DrawChatTopK },
+        { AiSection, "Разговор: min-p", "Отсекает слишком маловероятные слова.", DrawChatMinP },
+        { AiSection, "Разговор: штраф за повторы", "100% — без штрафа, выше — меньше повторов.", DrawChatRepeat },
+        { AiSection, "Разговор: длина ответа", "Предел в токенах (примерно слоги).", DrawChatTokens },
+        { AiSection, "Задачи: температура", "Для размышлений и задач из телеграма.", DrawTaskTemp },
+        { AiSection, "Задачи: top-p", "Какую долю вероятных слов рассматривать.", DrawTaskTopP },
+        { AiSection, "Задачи: top-k", "Из скольких лучших слов выбирать. 0 — без ограничения.", DrawTaskTopK },
+        { AiSection, "Задачи: min-p", "Отсекает слишком маловероятные слова.", DrawTaskMinP },
+        { AiSection, "Задачи: штраф за повторы", "100% — без штрафа, выше — меньше повторов.", DrawTaskRepeat },
+        { AiSection, "Задачи: длина ответа", "Предел в токенах вместе с размышлениями.", DrawTaskTokens },
+        { AiSection, "Seed", "Одинаковое число — повторяемые ответы, −1 — каждый раз случайно.", DrawAiSeed },
+        { AiSection, "Загружать при запуске", "Выключено — видеокарта свободна, пока не спросишь; первый ответ на 5–15 секунд дольше.", DrawAiPreload, true },
+        { AiSection, "Освобождать в играх", "Если минуту нет вопросов и на весь экран открыта игра или видео — нейросеть выгружается.", DrawGameUnload, true },
+        { AiSection, "Глаза модели", "Понимать картинки. Загружаются только когда приходит снимок экрана (+0,9 ГБ видеопамяти до выгрузки).", DrawAiVision, true },
+        { AiSection, "Слои на видеокарте", "99 — всё на видеокарте, 0 — только процессор. Не хватает видеопамяти — убавь. Нужен перезапуск.", DrawGpuLayers },
+        { AiSection, "Потоки процессора", "0 — движок выберет сам. Нужен перезапуск.", DrawAiThreads },
+        { AiSection, "Размер контекста", "Сколько нейросеть помнит за раз, делится между запросами. Больше — больше памяти. Нужен перезапуск.", DrawAiContext },
+        { AiSection, "Запросов одновременно", "2 — можно говорить с Аней, пока она решает задачу для телеграма. Нужен перезапуск.", DrawAiParallel },
+        { AiSection, "Свои параметры движка", "Для знающих: дополнительные аргументы llama-server. Ошибка в них не даст нейросети запуститься.", DrawEngineArgs },
+        { AiSection, "Применить", "Настройки ответов работают сразу, настройки движка — после перезапуска.", DrawAiApply },
 
         { SearchSection, "Поисковик", "Куда Аня отправляет «найди …», «загугли …» и «найди в интернете …».", DrawSearchEngine },
 
@@ -555,22 +776,31 @@ namespace {
 
         { WidgetsSection, "Погода", "Слева от сферы: 4 часа, а при наведении — весь день.", DrawWeatherWidget, true },
         { WidgetsSection, "Город", "Для погоды, прогноза и виджета.", DrawCity },
+        { WidgetsSection, "Курсы валют", "Карточка на главном экране, под блоками системы и музыки.", DrawRatesWidget, true },
+        { WidgetsSection, "Валюта курсов", "В какой валюте показывать. По умолчанию — валюта страны твоего города.", DrawRatesCurrency },
 
         { Connections, "Телеграм-бот", "Управляй компьютером с телефона: снимок экрана, «реши с экрана», громкость, блокировка, "
                                        "«выключить, но остаться на связи».", DrawTelegram, true },
         { Connections, "Токен бота", "Выдаёт @BotFather. Никому не показывай — с ним можно управлять ботом.", DrawTelegramToken },
-        { Connections, "Кому можно", "ID в телеграме того, кого бот слушается. Всем остальным он отвечает отказом.", DrawTelegramOwner },
-        { Connections, "Сообщение при запуске", "«Аня запущена и на связи» в телеграме каждый раз, когда Аня стартует.", DrawGreet, true },
-        { Connections, "Блокировать при «Выключить»", "Надёжнее, но тогда «☀ Включить» покажет экран блокировки — пароль придётся вводить "
+        { Privacy, "Кому можно", "ID в телеграме того, кого бот слушается. Всем остальным он отвечает отказом.", DrawTelegramOwner },
+        { Connections, "Уведомления в телеграме", "Сообщения, которые бот шлёт сам: запуск, свежая кнопка пульта, блокировка компьютера. Выключено — бот пишет только в ответ.", DrawGreet, true },
+        { Connections, "Пульт в телеграме", "Приложение в меню бота: быстрые команды, запуск программ и удалённый рабочий стол. Вход только для владельца. "
+                                            "Пока включено, работает защищённый туннель cloudflared.", DrawRemoteDesktop, true },
+        { Privacy, "Блокировать при «Выключить»", "Надёжнее, но тогда «☀ Включить» покажет экран блокировки — пароль придётся вводить "
                                                      "за компьютером: снять блокировку с телефона Windows не даёт.", DrawLockOnStandby, true },
         { Connections, "Статус в Discord", "«Играет в Anya», а когда играет музыка или видео — «Слушает» или «Смотрит».", DrawDiscord, true },
-        { Connections, "ID приложения Discord", "Создай приложение «Anya» на discord.com/developers и вставь его Application ID. "
+        { Connections, "ID приложения Discord", "Создай приложение «ASTRIX» на discord.com/developers и вставь его Application ID. "
                                                 "Картинка — ассет «anya» в Rich Presence → Art Assets.", DrawDiscordApp },
         { Connections, "Показывать музыку", "«Слушает: трек — исполнитель» из Яндекс Музыки, Spotify и других плееров.", DrawDiscordMusic, true },
-        { Customization, "Полная кастомизация", "Сфера, погода, карточки справа, поле ввода и шторка разговора — тяни мышью куда хочешь, "
+        { SystemSection, "Полная кастомизация", "Сфера, погода, карточки справа, поле ввода и шторка разговора — тяни мышью куда хочешь, "
                                                 "а за уголок — меняй размер. Выключи галочку или нажми «готово», чтобы закончить.", DrawEditBlocks },
-        { Customization, "Настройки по умолчанию", "Если что-то сломалось или запуталась — вернуть всё как было при установке.", DrawResetAll },
-        { Customization, "Удалить программу", "Полностью: все данные, настройки и автозапуск. Перед удалением спрошу ещё раз.", DrawRemoveAll },
+        { SystemSection, "Настройки по умолчанию", "Если что-то сломалось или запуталась — вернуть всё как было при установке.", DrawResetAll },
+        { Updates, "Удалить программу", "Полностью: все данные, настройки и автозапуск. Перед удалением спрошу ещё раз.", DrawRemoveAll },
+        { Privacy, "Снимки экрана", "Разрешить боту и нейросети снимать экран по запросу с телефона.", DrawPrivacyScreen, true },
+        { Privacy, "Журнал", "Файл с действиями программы лежит только на этом компьютере.", DrawClearLog },
+        { Learning, "Что помнить обо мне", "Интересы, привычки, как к тебе обращаться. Нейросеть учитывает это в каждом ответе.", DrawAboutMe },
+        { SearchSection, "Поиск файлов", "Как выполнять «найди файл …»: своим поиском ASTRIX, через Windows или через Everything.", DrawFileSearch },
+        { Updates, "Версия", "Проверить, вышла ли новая версия на GitHub.", DrawUpdates },
         { Connections, "Показывать видео", "«Смотрит: название видео» из браузера (YouTube).", DrawDiscordVideo, true },
     };
 
@@ -594,11 +824,11 @@ namespace {
 
     // ---------------------------------------------------------------- части страницы
     void DrawSidebar(ImDrawList* dl, ImVec2 pos, float width) {
-        const float itemHeight = Px(40), pad = Px(7);
+        const float itemHeight = Px(37), pad = Px(7);
         const bool compact = width < Px(120);
         const ImVec2 max(pos.x + width, pos.y + pad * 2 + itemHeight * static_cast<float>(kSections));
-        dl->AddRectFilled(pos, max, Theme::Surface(0.9f), Px(20));
-        dl->AddRect(pos, max, IM_COL32(255, 255, 255, 14), Px(20));
+        dl->AddRectFilled(pos, max, Theme::Surface(1.12f), Px(20));
+        dl->AddRect(pos, max, Theme::Overlay(14), Px(20));
 
         for (int i = 0; i < kSections; ++i) {
             const ImVec2 a(pos.x + pad, pos.y + pad + i * itemHeight), b(pos.x + width - pad, a.y + itemHeight - Px(4));
@@ -613,22 +843,27 @@ namespace {
             ImGui::PopID();
             const bool selected = i == g_section && !g_query[0];
             static float s_hover[kSections] = {}, s_pick[kSections] = {};
-            const float k = std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
+            const float k = Theme::Ease(ImGui::GetIO().DeltaTime, 8.7f);
             s_hover[i] += ((hovered ? 1.0f : 0.0f) - s_hover[i]) * k;
             s_pick[i] += ((selected ? 1.0f : 0.0f) - s_pick[i]) * k;
             const float fill = std::max(s_pick[i] * 22.0f, s_hover[i] * 12.0f);
-            if (fill > 0.5f) dl->AddRectFilled(a, b, IM_COL32(255, 255, 255, static_cast<int>(fill)), Px(12));
+            if (fill > 0.5f) dl->AddRectFilled(a, b, Theme::Overlay(static_cast<int>(s_hover[i] * 12.0f)), Px(12));
+            if (s_pick[i] > 0.01f) { // выбранный раздел виден сразу: залит любимым цветом и обведён
+                dl->AddRectFilled(a, b, Theme::Accent().WithAlpha(0.34f * s_pick[i]), Px(12));
+                dl->AddRect(a, b, Theme::Accent().WithAlpha(0.75f * s_pick[i]), Px(12), 0, Px(1.2f));
+            }
             if (s_pick[i] > 0.02f) {
                 const float half = (b.y - a.y - Px(20)) * 0.5f * s_pick[i], mid = (a.y + b.y) * 0.5f; // полоска растёт от центра
                 dl->AddRectFilled(ImVec2(a.x, mid - half), ImVec2(a.x + Px(3), mid + half), Theme::Accent().WithAlpha(s_pick[i]), Px(2));
             }
-            const ImU32 color = selected ? Theme::kInk : Theme::kInkSoft;
+            const ImU32 color = selected ? Theme::kInk : Theme::kInkMuted;
             const float cy = (a.y + b.y) * 0.5f;
             Widgets::DrawIcon(dl, kInfo[i].icon, ImVec2(compact ? (a.x + b.x) * 0.5f : a.x + Px(20), cy), Px(15), color);
             if (compact) {
                 if (hovered) ImGui::SetTooltip("%s", kInfo[i].name);
             } else {
-                Widgets::Text(dl, Theme::semibold, ImVec2(a.x + Px(38), cy - Theme::semibold->LegacySize * 0.55f), color, kInfo[i].name);
+                ImFont* font = selected ? Theme::title : Theme::semibold;
+                Widgets::Text(dl, font, ImVec2(a.x + Px(38), cy - font->LegacySize * 0.55f), color, kInfo[i].name);
             }
         }
     }
@@ -638,8 +873,8 @@ namespace {
         static bool s_active = false; // поле в фокусе (с прошлого кадра) — подсветить рамку
         const bool active = s_active;
         const ImVec2 max(pos.x + width, pos.y + height);
-        dl->AddRectFilled(pos, max, IM_COL32(255, 255, 255, 10), height * 0.5f);
-        dl->AddRect(pos, max, active ? Theme::Palette(0).WithAlpha(0.6f) : IM_COL32(255, 255, 255, 24), height * 0.5f, 0, Px(1.2f));
+        dl->AddRectFilled(pos, max, Theme::Overlay(10), height * 0.5f);
+        dl->AddRect(pos, max, active ? Theme::Palette(0).WithAlpha(0.6f) : Theme::Overlay(24), height * 0.5f, 0, Px(1.2f));
         Widgets::DrawIcon(dl, Icon::Search, ImVec2(pos.x + Px(20), pos.y + height * 0.5f), Px(15), Theme::kInkMuted);
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x + Px(36), pos.y + (height - ImGui::GetFrameHeight()) * 0.5f));
@@ -653,10 +888,29 @@ namespace {
         return changed;
     }
 
+    // Текст по центру с переносом по словам; возвращает высоту
+    float CenteredText(ImDrawList* dl, ImFont* font, float centerX, float top, float maxWidth, ImU32 color, const std::string& text) {
+        std::vector<std::string> lines(1);
+        size_t at = 0;
+        while (at < text.size()) {
+            size_t end = text.find(' ', at);
+            if (end == std::string::npos) end = text.size();
+            const std::string word = text.substr(at, end - at);
+            const std::string candidate = lines.back().empty() ? word : lines.back() + " " + word;
+            if (!lines.back().empty() && Widgets::TextSize(font, candidate.c_str()).x > maxWidth) lines.push_back(word);
+            else lines.back() = candidate;
+            at = end + 1;
+        }
+        const float height = font->LegacySize * 1.3f;
+        for (size_t i = 0; i < lines.size(); ++i)
+            Widgets::Text(dl, font, ImVec2(centerX - Widgets::TextSize(font, lines[i].c_str()).x * 0.5f, top + height * i), color, lines[i].c_str());
+        return height * lines.size();
+    }
+
     // Карточка раздела: заголовок, пояснение и его настройки (только подходящие под поиск)
     void DrawCard(Section section, const std::wstring& query, float width) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        const float pad = Px(30), inner = width - pad * 2;
+        const float pad = Px(22), inner = width - pad * 2;
         const ImVec2 start = ImGui::GetCursorScreenPos();
 
         dl->ChannelsSplit(2);
@@ -664,53 +918,72 @@ namespace {
         ImGui::SetCursorScreenPos(ImVec2(start.x + pad, start.y + pad));
         ImGui::BeginGroup();
         const ImVec2 head = ImGui::GetCursorScreenPos();
-        Widgets::DrawIcon(dl, kInfo[section].icon, ImVec2(head.x + Px(10), head.y + Theme::display->LegacySize * 0.55f), Px(17), Theme::kInk);
-        Widgets::Text(dl, Theme::display, ImVec2(head.x + Px(30), head.y), Theme::kInk, kInfo[section].name);
-        ImGui::Dummy(ImVec2(inner, Theme::display->LegacySize + Px(4)));
-        ImGui::PushFont(Theme::semibold, Theme::semibold->LegacySize);
-        ImGui::TextDisabled("%s", kInfo[section].about);
-        ImGui::PopFont();
-        ImGui::Dummy(ImVec2(0, Px(10)));
+        const float nameWidth = Widgets::TextSize(Theme::hero, kInfo[section].name).x, nameLeft = head.x + (inner - nameWidth + Px(34)) * 0.5f;
+        Widgets::DrawIcon(dl, kInfo[section].icon, ImVec2(nameLeft - Px(20), head.y + Theme::hero->LegacySize * 0.55f), Px(20), Theme::kInk);
+        Widgets::Text(dl, Theme::hero, ImVec2(nameLeft, head.y), Theme::kInk, kInfo[section].name);
+        const float aboutHeight = CenteredText(dl, Theme::semibold, head.x + inner * 0.5f, head.y + Theme::hero->LegacySize + Px(6), inner, Theme::kInkMuted, kInfo[section].about);
+        ImGui::Dummy(ImVec2(inner, Theme::hero->LegacySize + Px(6) + aboutHeight + Px(4)));
+        const bool grid = section == WidgetsSection; // виджеты — блоками, как в сценариях
+        const float gridLeft = head.x;
+        float gridTop = ImGui::GetCursorScreenPos().y, gridRow = 0;
+        int blockIndex = 0;
 
         bool first = true;
         ImVec2 glowMin(0, 0), glowMax(0, 0);
         for (const Item& item : kItems) {
             if (item.section != section || !Matches(item, query)) continue;
             const bool glowing = &item - kItems == g_reveal;
+            if (grid) {
+                const float gap = Px(12), blockW = (inner - gap) * 0.5f, blockPad = Px(14);
+                static float s_rowHeight[16] = {};
+                static std::unordered_map<std::string, float> s_blockControl;
+                const int column = blockIndex % 2, rowIndex = std::min(blockIndex / 2, 15);
+                const ImVec2 a(gridLeft + column * (blockW + gap), gridTop), b(a.x + blockW, a.y + std::max(s_rowHeight[rowIndex], Px(90)));
+                dl->AddRectFilled(a, b, Theme::Overlay(11), Px(16));
+                dl->AddRect(a, b, Theme::Overlay(20), Px(16), 0, Px(1));
+                dl->AddRectFilled(ImVec2(a.x + Px(16), a.y), ImVec2(b.x - Px(16), a.y + Px(3)), Theme::Accent().WithAlpha(0.9f), Px(2));
+                ImGui::PushID(item.title);
+                const float blockCenter = a.x + blockW * 0.5f;
+                float blockY = a.y + blockPad;
+                blockY += CenteredText(dl, Theme::display, blockCenter, blockY, blockW - blockPad * 2, Theme::kInk, Text::Brand(item.title, Config::Get().assistant));
+                blockY += CenteredText(dl, Theme::semibold, blockCenter, blockY + Px(2), blockW - blockPad * 2, Theme::kInkMuted, Text::Brand(item.hint, Config::Get().assistant)) + Px(10);
+                float& control = s_blockControl[item.title];
+                ImGui::SetCursorScreenPos(ImVec2(blockCenter - control * 0.5f, blockY));
+                ImGui::BeginGroup();
+                item.draw(blockW - blockPad * 2);
+                ImGui::EndGroup();
+                control = ImGui::GetItemRectSize().x;
+                gridRow = std::max(gridRow, ImGui::GetItemRectMax().y + blockPad - a.y);
+                ImGui::PopID();
+                if (glowing) { glowMin = a; glowMax = b; }
+                if (column == 1) { s_rowHeight[rowIndex] = gridRow; gridTop += gridRow + gap; gridRow = 0; }
+                else s_rowHeight[rowIndex] = std::max(s_rowHeight[rowIndex], gridRow); // высоту ряда задаёт самый высокий блок
+                ++blockIndex;
+                continue;
+            }
             const ImVec2 at = ImGui::GetCursorScreenPos();
             if (!first) {
-                dl->AddLine(ImVec2(at.x, at.y), ImVec2(at.x + inner, at.y), IM_COL32(255, 255, 255, 10), Px(1));
+                dl->AddLine(ImVec2(at.x, at.y), ImVec2(at.x + inner, at.y), Theme::Overlay(10), Px(1));
             }
-            ImGui::Dummy(ImVec2(0, Px(first ? 6.0f : 16.0f)));
+            ImGui::Dummy(ImVec2(0, Px(first ? 2.0f : 7.0f)));
             first = false;
 
             ImGui::PushID(item.title);
             const ImVec2 row = ImGui::GetCursorScreenPos();
-            const float textWidth = item.inlineControl ? inner - Px(64) : inner;
-            ImGui::PushFont(Theme::title, Theme::title->LegacySize);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::kInk);
-            ImGui::TextUnformatted(Text::Brand(item.title, Config::Get().assistant).c_str());
-            ImGui::PopStyleColor();
-            ImGui::PopFont();
-            ImGui::Dummy(ImVec2(0, Px(2)));
-            ImGui::PushFont(Theme::semibold, Theme::semibold->LegacySize);
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textWidth);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::kInkMuted);
-            ImGui::TextUnformatted(Text::Brand(item.hint, Config::Get().assistant).c_str());
-            ImGui::PopStyleColor();
-            ImGui::PopTextWrapPos();
-            ImGui::PopFont();
-            if (item.inlineControl) { // переключатель — справа, на уровне названия
-                const ImVec2 after = ImGui::GetCursorScreenPos();
-                ImGui::SetCursorScreenPos(ImVec2(row.x + inner - Px(36), row.y + Px(3)));
-                item.draw(inner);
-                ImGui::SetCursorScreenPos(after);
-                ImGui::Dummy(ImVec2(0, Px(2)));
-            } else {
-                ImGui::Dummy(ImVec2(0, Px(4)));
-                item.draw(inner);
-            }
-            ImGui::Dummy(ImVec2(0, Px(12)));
+            const float centerX = row.x + inner * 0.5f;
+            float y = row.y + CenteredText(dl, Theme::display, centerX, row.y, inner, Theme::kInk, Text::Brand(item.title, Config::Get().assistant));
+            y += Px(3);
+            y += CenteredText(dl, Theme::semibold, centerX, y, std::min(inner, Px(620)), Theme::kInkMuted, Text::Brand(item.hint, Config::Get().assistant));
+            y += Px(7);
+            // управление — тоже по центру: ширину узнаём на прошлом кадре
+            static std::unordered_map<std::string, float> s_widths;
+            float& controlWidth = s_widths[item.title];
+            ImGui::SetCursorScreenPos(ImVec2(row.x + (inner - controlWidth) * 0.5f, y));
+            ImGui::BeginGroup();
+            item.draw(inner);
+            ImGui::EndGroup();
+            controlWidth = ImGui::GetItemRectSize().x;
+            ImGui::Dummy(ImVec2(0, Px(5)));
             ImGui::PopID();
             if (glowing) {
                 glowMin = ImVec2(row.x - Px(14), row.y - Px(10));
@@ -721,14 +994,16 @@ namespace {
                 }
             }
         }
+        if (grid) {
+            ImGui::SetCursorScreenPos(ImVec2(gridLeft, gridTop + gridRow + Px(10)));
+            ImGui::Dummy(ImVec2(inner, 0));
+        }
         ImGui::EndGroup();
 
         const ImVec2 cardMax(start.x + width, ImGui::GetItemRectMax().y + pad - Px(14));
         dl->ChannelsSetCurrent(0);
-        dl->AddRectFilled(start, cardMax, Theme::Surface(0.9f), Px(26));
-        dl->AddRectFilledMultiColor(ImVec2(start.x + Px(1), start.y + Px(1)), ImVec2(cardMax.x - Px(1), start.y + Px(60)),
-            IM_COL32(255, 255, 255, 14), IM_COL32(255, 255, 255, 14), IM_COL32(255, 255, 255, 0), IM_COL32(255, 255, 255, 0)); // блик стекла
-        dl->AddRect(start, cardMax, IM_COL32(255, 255, 255, 16), Px(26));
+        dl->AddRectFilled(start, cardMax, Theme::Surface(1.12f), Px(26));
+        dl->AddRect(start, cardMax, Theme::Overlay(16), Px(26));
         if (glowMax.x > glowMin.x) { // оранжевое свечение: пульсирует и плавно гаснет
             const float t = g_revealTime;
             const float fade = std::min(1.0f, t * 4.0f) * std::clamp((kRevealSeconds - t) / 1.5f, 0.0f, 1.0f);
@@ -780,7 +1055,7 @@ bool SettingsPage::Covers() { return g_open && g_anim > 0.97f; }
 float SettingsPage::Visibility() { return g_anim; }
 
 void SettingsPage::Draw(ImVec2 screen, float top, float dt) {
-    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * std::min(1.0f, dt * 14.0f);
+    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * Theme::Ease(dt, 8.7f);
     if (g_anim < 0.01f) return;
     const float ease = 1.0f - std::pow(1.0f - g_anim, 3.0f);
     const float slide = (1.0f - ease) * Px(14); // въезжает чуть снизу
@@ -805,7 +1080,6 @@ void SettingsPage::Draw(ImVec2 screen, float top, float dt) {
     // разделы слева — плавающая карточка (в узком окне — только значки)
     const float sideWidth = size.x < Px(760) ? Px(54) : Px(200);
     const float headerY = origin.y + Px(24);
-    DrawSidebar(dl, ImVec2(origin.x + Px(20), headerY + Px(6)), sideWidth);
 
     // колонка настроек — по центру окна, но не наезжая на меню слева
     const float sideRight = origin.x + Px(20) + sideWidth + Px(28);
@@ -824,6 +1098,7 @@ void SettingsPage::Draw(ImVec2 screen, float top, float dt) {
         searchPos = ImVec2(left, contentTop);
         contentTop += Px(52);
     }
+    DrawSidebar(dl, ImVec2(origin.x + Px(20), contentTop), sideWidth); // верх меню — на одной линии с карточкой настроек
     if (DrawSearchField(dl, searchPos, searchWidth)) { g_lastShown = -1; g_contentAnim = 0.3f; } // новый запрос — список снова сверху
 
     // карточки
@@ -838,7 +1113,7 @@ void SettingsPage::Draw(ImVec2 screen, float top, float dt) {
     ImGui::BeginChild("##settingsCards", ImVec2(origin.x + size.x - Px(6) - (left - Px(4)), origin.y + size.y - contentTop), ImGuiChildFlags_None,
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollWithMouse);
     Widgets::SmoothScroll(&g_scrollTo);
-    g_contentAnim += (1.0f - g_contentAnim) * std::min(1.0f, dt * 9.0f);
+    g_contentAnim += (1.0f - g_contentAnim) * Theme::Ease(dt, 5.6f);
     const float appear = 1.0f - std::pow(1.0f - g_contentAnim, 3.0f);
     ImGui::SetCursorPos(ImVec2(Px(4), Px(2) + (1.0f - appear) * Px(18))); // карточки чуть выезжают снизу
     bool any = false;

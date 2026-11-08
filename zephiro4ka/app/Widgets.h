@@ -8,7 +8,7 @@
 
 namespace Widgets {
     enum class Icon { Chat, Gear, Minimize, Maximize, Close, Mic, Send, Stop,
-                      User, Wave, Spark, Search, Layers, Grid, Sun, Home, Play, Pause, Next, Previous, Phone, Flow, Plus, Trash, Chevron }; // разделы, меню, плеер, сценарии
+                      User, Wave, Spark, Search, Layers, Grid, Sun, Home, Play, Pause, Next, Previous, Phone, Flow, Plus, Trash, Chevron, Lock, Book, Download }; // разделы, меню, плеер, сценарии
 
     void DrawIcon(ImDrawList* dl, Icon icon, ImVec2 center, float size, ImU32 color);
 

@@ -56,7 +56,7 @@ namespace {
     }
 
     void Smooth(Entry& e) {
-        const float k = std::min(1.0f, ImGui::GetIO().DeltaTime * 14.0f);
+        const float k = Theme::Ease(ImGui::GetIO().DeltaTime, 8.7f);
         e.shownX += (e.x - e.shownX) * k, e.shownY += (e.y - e.shownY) * k, e.shownS += (e.s - e.shownS) * k;
         if (std::fabs(e.x - e.shownX) < 1e-4f) e.shownX = e.x;
         if (std::fabs(e.y - e.shownY) < 1e-4f) e.shownY = e.y;
@@ -115,7 +115,7 @@ void HomeLayout::DrawEditor(ImVec2 screen, float top, bool pageOpen) {
     std::vector<Child> children;
     children.swap(g_children);
     static float s_anim = 0.0f;
-    s_anim += ((Editing() && !pageOpen ? 1.0f : 0.0f) - s_anim) * std::min(1.0f, ImGui::GetIO().DeltaTime * 10.0f);
+    s_anim += ((Editing() && !pageOpen ? 1.0f : 0.0f) - s_anim) * Theme::Ease(ImGui::GetIO().DeltaTime, 6.2f);
     if (!Editing() || pageOpen || s_anim < 0.01f) { if (!Editing()) g_drag = {}; return; }
     const float ease = 1.0f - std::pow(1.0f - s_anim, 3.0f);
 

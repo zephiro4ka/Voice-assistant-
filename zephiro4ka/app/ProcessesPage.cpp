@@ -154,9 +154,9 @@ namespace {
         const ImVec2 end(start.x + width, ImGui::GetItemRectMax().y + pad);
         dl->ChannelsSetCurrent(0);
         dl->AddRectFilled(start, end, Theme::Surface(0.9f), Px(24));
-        dl->AddRectFilledMultiColor(ImVec2(start.x + Px(1), start.y + Px(1)), ImVec2(end.x - Px(1), start.y + Px(50)), IM_COL32(255, 255, 255, 12),
-            IM_COL32(255, 255, 255, 12), IM_COL32(255, 255, 255, 0), IM_COL32(255, 255, 255, 0));
-        dl->AddRect(start, end, IM_COL32(255, 255, 255, 16), Px(24));
+        dl->AddRectFilledMultiColor(ImVec2(start.x + Px(1), start.y + Px(1)), ImVec2(end.x - Px(1), start.y + Px(50)), Theme::Overlay(12),
+            Theme::Overlay(12), Theme::Overlay(0), Theme::Overlay(0));
+        dl->AddRect(start, end, Theme::Overlay(16), Px(24));
         dl->ChannelsMerge();
         ImGui::SetCursorScreenPos(ImVec2(start.x, end.y + Px(16)));
         ImGui::Dummy(ImVec2(width, 0));
@@ -583,7 +583,7 @@ namespace {
                 Rect target = dragged ? g_drag.now : TileRect(cfg);
                 // плитка плавно едет на место (после прилипания к сетке и когда её сдвинули соседи)
                 Rect& shown = g_shown.try_emplace(key, target).first->second;
-                const float k = dragged ? 1.0f : std::min(1.0f, dt * 14.0f);
+                const float k = dragged ? 1.0f : Theme::Ease(dt, 8.7f);
                 shown = { shown.x + (target.x - shown.x) * k, shown.y + (target.y - shown.y) * k, shown.w + (target.w - shown.w) * k, shown.h + (target.h - shown.h) * k };
                 bottom = std::max(bottom, std::max(shown.y + shown.h, target.y + target.h));
                 const auto [a, b] = toScreen(shown);
@@ -632,10 +632,10 @@ namespace {
                 if (dragged) dl->AddRectFilled(ImVec2(a.x, a.y + Px(10)), ImVec2(b.x, b.y + Px(14)), IM_COL32(0, 0, 0, 70), Px(18)); // тень, пока несём
                 const ImVec2 ta(a.x, a.y - lift), tb(b.x, b.y - lift);
                 dl->AddRectFilled(ta, tb, dragged ? Theme::Surface(1.0f) : IM_COL32(0, 0, 0, hovered ? 72 : 50), Px(16));
-                dl->AddRect(ta, tb, dragged ? Theme::Accent().WithAlpha(0.8f) : IM_COL32(255, 255, 255, hovered ? 28 : 12), Px(16), 0, dragged ? Px(1.6f) : Px(1));
+                dl->AddRect(ta, tb, dragged ? Theme::Accent().WithAlpha(0.8f) : Theme::Overlay(hovered ? 28 : 12), Px(16), 0, dragged ? Px(1.6f) : Px(1));
                 if (hovered && !dragged) { // уголок-«ручка» внизу справа
-                    dl->AddLine(ImVec2(tb.x - Px(12), tb.y - Px(5)), ImVec2(tb.x - Px(5), tb.y - Px(12)), IM_COL32(255, 255, 255, 60), Px(1.4f));
-                    dl->AddLine(ImVec2(tb.x - Px(8), tb.y - Px(5)), ImVec2(tb.x - Px(5), tb.y - Px(8)), IM_COL32(255, 255, 255, 60), Px(1.4f));
+                    dl->AddLine(ImVec2(tb.x - Px(12), tb.y - Px(5)), ImVec2(tb.x - Px(5), tb.y - Px(12)), Theme::Overlay(60), Px(1.4f));
+                    dl->AddLine(ImVec2(tb.x - Px(8), tb.y - Px(5)), ImVec2(tb.x - Px(5), tb.y - Px(8)), Theme::Overlay(60), Px(1.4f));
                 }
                 ImGui::PushClipRect(ta, tb, true);
                 const bool compact = h < Px(100), tall = h >= Px(160);
@@ -722,7 +722,7 @@ namespace {
                 // наведение: сегмент приподнимается и светлеет
                 const bool over = ImGui::IsMouseHoveringRect(ImVec2(x, bar.y - Px(4)), ImVec2(x + w, bar.y + h + Px(4)), false) && ImGui::IsWindowHovered();
                 if (over) hoveredPart = i;
-                s_lift[i] += ((over ? 1.0f : 0.0f) - s_lift[i]) * std::min(1.0f, dt * 14.0f);
+                s_lift[i] += ((over ? 1.0f : 0.0f) - s_lift[i]) * Theme::Ease(dt, 8.7f);
                 const float grow = Px(3) * s_lift[i];
                 const ImDrawFlags corners = (x == bar.x ? ImDrawFlags_RoundCornersLeft : 0) | (i == 6 || x + w >= bar.x + inner - 0.5f ? ImDrawFlags_RoundCornersRight : 0);
                 const Theme::Color color = parts[i].color.Mix({ 255, 255, 255 }, 0.25f * s_lift[i]);
@@ -785,7 +785,7 @@ namespace {
                 ImGui::PopID();
                 ImGui::SetCursorScreenPos(ImVec2(bar.x, p.y));
                 if (hovered || g_detail == i)
-                    dl->AddRectFilled(cellMin, cellMax, g_detail == i ? parts[i].color.WithAlpha(0.14f) : IM_COL32(255, 255, 255, 8), Px(10));
+                    dl->AddRectFilled(cellMin, cellMax, g_detail == i ? parts[i].color.WithAlpha(0.14f) : Theme::Overlay(8), Px(10));
                 if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
                 dl->AddCircleFilled(ImVec2(p.x + Px(6), p.y + Px(9)), Px(5), parts[i].color.WithAlpha(1.0f), 16);
                 Widgets::Text(dl, Theme::semibold, ImVec2(p.x + Px(20), p.y + Px(1)), Theme::kInk, parts[i].name);
@@ -797,10 +797,10 @@ namespace {
             }
 
             if (g_detail >= 0 && g_detail < 7) { // панель «кто ест»: выезжает под полосой
-                g_detailAnim += (1.0f - g_detailAnim) * std::min(1.0f, dt * 10.0f);
+                g_detailAnim += (1.0f - g_detailAnim) * Theme::Ease(dt, 6.2f);
                 ImGui::Dummy(ImVec2(0, Px(6)));
                 const ImVec2 at = ImGui::GetCursorScreenPos();
-                dl->AddLine(ImVec2(at.x, at.y), ImVec2(at.x + inner, at.y), IM_COL32(255, 255, 255, 14), Px(1));
+                dl->AddLine(ImVec2(at.x, at.y), ImVec2(at.x + inner, at.y), Theme::Overlay(14), Px(1));
                 ImGui::Dummy(ImVec2(0, Px(10) + (1.0f - g_detailAnim) * Px(10)));
                 ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * g_detailAnim);
                 Widgets::Text(dl, Theme::title, ImGui::GetCursorScreenPos(), parts[g_detail].color.Mix({ 255, 255, 255 }, 0.4f).WithAlpha(g_detailAnim),
@@ -864,7 +864,7 @@ namespace {
                 ImGui::PushID(key.c_str());
                 if (ImGui::InvisibleButton("##row", ImVec2(inner, Px(40)))) open ? (void)g_expanded.erase(key) : (void)g_expanded.insert(key);
                 const bool hovered = ImGui::IsItemHovered();
-                if (hovered || open) dl->AddRectFilled(a, b, IM_COL32(255, 255, 255, open ? 14 : 9), Px(10));
+                if (hovered || open) dl->AddRectFilled(a, b, Theme::Overlay(open ? 14 : 9), Px(10));
 
                 // стрелка раскрытия, название, число процессов
                 const float cy = (a.y + b.y) * 0.5f;
@@ -963,7 +963,7 @@ bool ProcessesPage::Covers() { return g_open && g_anim > 0.97f; }
 float ProcessesPage::Visibility() { return g_anim; }
 
 void ProcessesPage::Draw(ImVec2 screen, float top, float dt) {
-    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * std::min(1.0f, dt * 14.0f);
+    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * Theme::Ease(dt, 8.7f);
     if (g_anim < 0.01f) return;
     const float ease = 1.0f - std::pow(1.0f - g_anim, 3.0f);
     const ProcessMonitor::Snapshot s = ProcessMonitor::Get();

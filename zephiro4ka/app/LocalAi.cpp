@@ -15,23 +15,76 @@
 #include <algorithm>
 #include <cstdlib>
 #include <atomic>
+#include <cstdio>
 #include <mutex>
 #include <thread>
 
 
 namespace {
     constexpr unsigned short kPort = 18080;     // свой порт, чтобы не мешать другим программам
-    constexpr int kContextSize = 16384;        // на 2 потока по 8192: хватает и на снимок экрана, и на долгие размышления над задачей
+    constexpr const char* kContextSize = "16384"; // на 2 потока по 8192: хватает и на снимок экрана, и на долгие размышления над задачей
     constexpr Clock kStartupTimeoutMs = 180000; // загрузка модели в видеокарту — обычно 5–20 с
 
     std::mutex g_mutex;
     std::vector<std::string> g_models;
     std::string g_activeModel;
     HANDLE g_process = nullptr;
-    std::atomic<bool> g_vision{ false }; // движок запущен с mmproj — понимает картинки
+    std::atomic<bool> g_vision{ false };      // у модели есть «глаза» (mmproj) и они разрешены в настройках
+    std::atomic<bool> g_engineEyes{ false };  // движок сейчас запущен с ними: они занимают ~0,9 ГБ видеопамяти
+    std::atomic<bool> g_wantEyes{ false };    // следующий запуск — с «глазами»
+    std::atomic<int> g_busy{ 0 };             // сколько запросов выполняется: во время них не выгружаем
+    struct BusyScope { BusyScope() { ++g_busy; } ~BusyScope() { --g_busy; } };
     std::atomic<Clock> g_lastUse{ 0 };    // когда нейросеть последний раз отвечала
     std::atomic<bool> g_unloaded{ false }; // выгружена из видеокарты за простоем — проснётся на вопрос
     std::mutex g_startMutex;    // перезапуски идут строго по очереди
+    std::atomic<int> g_tuningVersion{ 0 };
+
+    int AiInt(const char* key, const char* fallback) { return std::atoi(Config::Value("ai", key, fallback).c_str()); }
+
+    // ------------------------------------------------------------ настройки ответов
+    struct Preset { const char* name; int chat[6]; int task[6]; }; // температура%, top_p%, top_k, min_p%, повторы%, длина
+    constexpr Preset kPresets[Ai::kProfiles - 1] = {
+        { "Стандарт",  { 70, 90, 40, 5, 100, 600 },  { 60, 95, 20, 5, 100, 5000 } },
+        { "Быстро",    { 50, 90, 40, 5, 105, 250 },  { 40, 90, 30, 5, 100, 1200 } },
+        { "Умно",      { 50, 90, 40, 5, 100, 900 },  { 60, 95, 20, 5, 100, 8000 } },
+        { "Креативно", { 110, 95, 80, 3, 110, 900 }, { 80, 95, 40, 3, 105, 5000 } },
+    };
+    constexpr const char* kFields[6] = { "temp", "top_p", "top_k", "min_p", "repeat", "tokens" };
+
+    std::string Key(const char* group, const char* field) { return std::string(group) + "_" + field; }
+
+    enum class Kind { Chat, Think, TelegramFast, TelegramDeep };
+
+    std::string Hundredths(int value) {
+        char text[32];
+        snprintf(text, sizeof(text), "%.2f", value / 100.0);
+        return text;
+    }
+
+    std::string Sampling(Kind kind) {
+        const int profile = Ai::Profile();
+        if (profile == 0) { // значения, с которыми программа настраивалась изначально
+            switch (kind) {
+            case Kind::Think: return "\"temperature\":0.6,\"top_p\":0.9,\"max_tokens\":1500,";
+            case Kind::TelegramFast: return "\"temperature\":0.4,\"top_p\":0.9,\"max_tokens\":1400,";
+            case Kind::TelegramDeep: return "\"temperature\":0.6,\"top_p\":0.95,\"top_k\":20,\"max_tokens\":5000,";
+            default: return "\"temperature\":0.7,\"top_p\":0.9,\"max_tokens\":600,";
+            }
+        }
+        const bool task = kind == Kind::Think || kind == Kind::TelegramDeep;
+        const Preset& standard = kPresets[0];
+        const int* defaults = task ? standard.task : standard.chat;
+        const char* group = task ? "task" : "chat";
+        int v[6];
+        for (int i = 0; i < 6; ++i) v[i] = AiInt(Key(group, kFields[i]).c_str(), std::to_string(defaults[i]).c_str());
+        if (kind == Kind::TelegramFast) v[5] = std::max(v[5], 1400); // письменный ответ длиннее голосового
+        return "\"temperature\":" + Hundredths(std::clamp(v[0], 0, 200)) + ",\"top_p\":" + Hundredths(std::clamp(v[1], 0, 100)) +
+               ",\"top_k\":" + std::to_string(std::clamp(v[2], 0, 500)) + ",\"min_p\":" + Hundredths(std::clamp(v[3], 0, 100)) +
+               ",\"repeat_penalty\":" + Hundredths(std::clamp(v[4], 50, 200)) + ",\"max_tokens\":" + std::to_string(std::clamp(v[5], 16, 32000)) +
+               ",\"seed\":" + std::to_string(AiInt("seed", "-1")) + ",";
+    }
+
+    int ThinkMode() { return AiInt("think_mode", "0"); } // 0 только по просьбе, 1 и для задач, 2 никогда
 
     // ------------------------------------------------------------ HTTP
     int Request(const wchar_t* method, const wchar_t* path, const std::string& body, int timeoutMs, const Http::OnData& onData) {
@@ -130,17 +183,24 @@ namespace {
 
     // ------------------------------------------------------------ запуск движка
     bool LaunchServer(const std::wstring& server, const std::string& model) {
-        const std::wstring projector = FindProjector(model);
-        g_vision = !projector.empty();
+        const std::wstring found = Config::Value("ai", "vision", "1") == "1" ? FindProjector(model) : std::wstring();
+        g_vision = !found.empty();
+        const std::wstring projector = g_wantEyes.load() ? found : std::wstring(); // без снимка «глаза» не загружаем
+        g_engineEyes = !projector.empty();
+        const int threads = AiInt("threads", "0");
+        const std::string extra = Text::Trim(Config::Value("ai", "engine_args", ""));
         const std::wstring arguments = L"-m \"" + Text::ToWide(model) + L"\"" +
             (projector.empty() ? L"" : L" --mmproj \"" + projector + L"\"") + // картинки: снимок экрана с задачей
             L" --host 127.0.0.1 --port " + std::to_wstring(kPort) +
-            L" -c " + std::to_wstring(kContextSize) +
-            L" -np 2" +      // два запроса сразу: Аня отвечает голосом, пока решает задачу для телеграма
-            L" -ngl 99" +   // все слои — в видеокарту (если её нет, движок сам останется на процессоре)
+            L" -c " + std::to_wstring(std::clamp(AiInt("context", kContextSize), 512, 262144)) +
+            L" -np " + std::to_wstring(std::clamp(AiInt("parallel", "2"), 1, 8)) + // два запроса сразу: Аня отвечает голосом, пока решает задачу для телеграма
+            L" -ngl " + std::to_wstring(std::clamp(AiInt("gpu_layers", "99"), 0, 999)) + // 99 — все слои в видеокарту (если её нет, движок сам останется на процессоре)
+            (threads > 0 ? L" -t " + std::to_wstring(threads) : L"") +
             L" -fa on -ctk q8_0 -ctv q8_0" + // сжатый кэш контекста: −400 МБ видеопамяти, качество то же
             L" --load-mode none" +          // без отображения файла в память: 0,7 ГБ ОЗУ вместо 2,8
-            L" --jinja";    // шаблон чата из самой модели
+            L" --jinja" +   // шаблон чата из самой модели
+            (extra.empty() ? L"" : L" " + Text::ToWide(extra)); // свои параметры из настроек — последними, чтобы могли всё переопределить
+        Log::Write("нейросеть: параметры движка — контекст " + std::to_string(AiInt("context", kContextSize)) + ", слоёв " + std::to_string(AiInt("gpu_layers", "99")));
         g_process = Sidecar::Launch(server, arguments, L"llama-server.log");
         return g_process != nullptr;
     }
@@ -188,6 +248,22 @@ namespace {
         g_app.aiChecked = true;
     }
 
+    // Запуск Ани: только находим модель. В видеокарту она загрузится при первом вопросе
+    void PrepareLazy() {
+        const auto models = DiscoverModels();
+        const std::string model = PickModel(models, Config::Get().model);
+        if (model.empty() || FindServer().empty()) { StartBlocking(); return; } // скажет, чего не хватает
+        {
+            std::lock_guard lock(g_mutex);
+            g_models = models;
+            g_activeModel = model;
+        }
+        g_vision = Config::Value("ai", "vision", "1") == "1" && !FindProjector(model).empty();
+        g_unloaded = true;
+        g_app.aiReady = true;
+        g_app.aiChecked = true;
+    }
+
     // ------------------------------------------------------------ разговор
     std::string StripThinking(const std::string& s) {
         std::string out;
@@ -218,7 +294,6 @@ namespace {
     }
 
     constexpr const char* kCommandTag = "КОМАНДА:";
-    constexpr Clock kThinkBudgetMs = 10000; // дольше модель не размышляет — дальше отвечает сразу
 
     // Как Аня разговаривает — по выбранному характеру
     std::string Persona(const Settings& cfg) {
@@ -243,7 +318,10 @@ namespace {
         for (const auto& [spoken, handle] : Config::Contacts()) friends += (friends.empty() ? "" : ", ") + spoken;
         if (friends.empty()) friends = "(пока никого)";
 
-        return "Ты — " + Config::Get().assistant + ", голосовая помощница-девушка. Пользователя зовут " + userName + ". " + Persona(Config::Get()) + " "
+        const std::string aboutMe = Text::Trim(Config::Value("ai", "about_me", ""));
+        const std::string extra = Text::Trim(Config::Value("ai", "extra_prompt", "")) + (aboutMe.empty() ? "" : " Что важно знать о пользователе: " + aboutMe);
+        return (Text::Trim(extra).empty() ? std::string() : "Особые указания пользователя (важнее всего остального, кроме формата команд): " + extra + "\n\n") +
+               "Ты — " + Config::Get().assistant + ", голосовая помощница-девушка. Пользователя зовут " + userName + ". " + Persona(Config::Get()) + " "
                "Ты живёшь на его компьютере и умеешь им управлять через свои команды.\n\n"
                "Если пользователь просит что-то СДЕЛАТЬ на компьютере — открыть программу или сайт, закрыть, зайти к кому-то в чат, "
                "поставить паузу, поменять громкость, напечатать текст, поставить таймер, найти в интернете — не отвечай словами. "
@@ -320,8 +398,7 @@ namespace {
         std::string system = SystemPrompt(userName);
         if (mode == Mode::Hurry) // задача — решаем «вслух»: коротко по шагам и с итогом
             system += " Сейчас отвечай сразу, без долгих раздумий: коротко покажи решение по шагам и обязательно назови итоговый ответ.";
-        std::string body = std::string("{\"stream\":true,\"temperature\":") + (think ? "0.6" : "0.7") + ",\"top_p\":0.9," +
-                           "\"max_tokens\":" + (think ? "1500" : "600") + "," +
+        std::string body = std::string("{\"stream\":true,") + Sampling(think ? Kind::Think : Kind::Chat) +
                            "\"chat_template_kwargs\":{\"enable_thinking\":" + (think ? "true" : "false") + "},\"messages\":[";
         body += "{\"role\":\"system\",\"content\":\"" + Json::Escape(system) + "\"}";
         for (const auto& m : Conversation::Recent())
@@ -329,24 +406,48 @@ namespace {
         return body + "]}";
     }
 
+    // Игра или видео на весь экран: окно закрывает монитор целиком
+    bool FullscreenAppInFront() {
+        const HWND window = GetForegroundWindow();
+        if (!window || window == GetShellWindow()) return false;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(window, &pid);
+        if (pid == GetCurrentProcessId()) return false;
+        wchar_t name[64] = {};
+        GetClassNameW(window, name, 64);
+        if (wcscmp(name, L"WorkerW") == 0 || wcscmp(name, L"Progman") == 0) return false; // рабочий стол
+        MONITORINFO info{ sizeof(info) };
+        RECT rect{};
+        if (!GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &info) || !GetWindowRect(window, &rect)) return false;
+        return rect.left <= info.rcMonitor.left && rect.top <= info.rcMonitor.top && rect.right >= info.rcMonitor.right && rect.bottom >= info.rcMonitor.bottom;
+    }
+
     // Выгрузить из видеокарты, если долго не спрашивали ([ai] idle_minutes, 0 — никогда): видеокарта свободна для игр
     void IdleWatcher() {
         for (;;) {
-            Sleep(30000);
+            Sleep(15000);
+            if (g_unloaded.load() || !g_app.aiReady || g_app.thinking || g_busy.load() > 0) continue;
             const int minutes = std::atoi(Config::Value("ai", "idle_minutes", "10").c_str());
-            if (minutes <= 0 || g_unloaded.load() || !g_app.aiReady || g_app.thinking) continue;
-            if (NowMs() - g_lastUse.load() < static_cast<Clock>(minutes) * 60000) continue;
+            const Clock idle = NowMs() - g_lastUse.load();
+            const bool idleLong = minutes > 0 && idle >= static_cast<Clock>(minutes) * 60000;
+            const bool game = idle >= 60000 && Config::Value("ai", "game_unload", "1") == "1" && FullscreenAppInFront();
+            if (!idleLong && !game) continue;
             std::lock_guard startLock(g_startMutex);
             Sidecar::Stop(g_process); // g_app.aiReady оставляем: нейросеть доступна, просто спит
             g_unloaded = true;
-            Log::Write("нейросеть: выгружена из видеокарты после " + std::to_string(minutes) + " мин простоя");
+            Log::Write(game ? "нейросеть: выгружена — открыта полноэкранная программа" : "нейросеть: выгружена из видеокарты после " + std::to_string(minutes) + " мин простоя");
         }
     }
 
     // Перед вопросом: выгружена — загрузить снова (5–15 с)
-    void EnsureAwake() {
+    void EnsureAwake(bool eyes = false) {
         g_lastUse = NowMs();
-        if (!g_unloaded.exchange(false)) return;
+        const bool asleep = g_unloaded.exchange(false);
+        if (!asleep && !(eyes && g_vision.load() && !g_engineEyes.load())) {
+            std::lock_guard wait(g_startMutex); // модель как раз загружается — дождаться
+            return;
+        }
+        g_wantEyes = eyes;
         Caption::Set("просыпаюсь…", true);
         Log::Write("нейросеть: загружаю обратно");
         StartBlocking();
@@ -357,14 +458,21 @@ namespace {
 // ---------------------------------------------------------------------
 void Ai::Start() {
     g_lastUse = NowMs();
-    std::thread(StartBlocking).detach();
+    if (Config::Value("ai", "preload", "0") == "1") std::thread(StartBlocking).detach();
+    else std::thread(PrepareLazy).detach();
     static bool s_watching = false;
     if (!s_watching) { s_watching = true; std::thread(IdleWatcher).detach(); }
 }
 
-void Ai::Restart() { Start(); }
+void Ai::Restart() {
+    g_lastUse = NowMs();
+    g_unloaded = false; // запуск сам загрузит модель
+    g_wantEyes = false;
+    std::thread(StartBlocking).detach();
+}
 
 Ai::Answer Ai::Ask(const std::string& prompt) {
+    BusyScope busy;
     EnsureAwake();
     const int generation = g_app.cancelGeneration.load();
     Conversation::Push("user", prompt);
@@ -413,16 +521,17 @@ Ai::Answer Ai::Ask(const std::string& prompt) {
         return true;
     };
 
-    const bool think = WantsDeepThinking(prompt);
+    const int thinkMode = ThinkMode();
+    const bool think = thinkMode != 2 && (WantsDeepThinking(prompt) || (thinkMode == 1 && IsTask(prompt)));
     const Mode mode = think ? Mode::Think : IsTask(prompt) ? Mode::Hurry : Mode::Quick;
-    if (think) { // размышления — до 10 секунд, сразу даём понять, что Аня не зависла
+    if (think) { // размышления ограничены по времени, сразу даём понять, что Аня не зависла
         Caption::Set("думаю…", true);
         Voice::Speak("Хорошо, подумаю");
     }
     // Ник «zephiro4ka» модель коверкает («зепhiro4ka»), поэтому называем пользователя так, как имя звучит вслух
     const Settings cfg = Config::Get();
     const std::string userName = cfg.spokenName.empty() ? cfg.name : cfg.spokenName;
-    if (think) thinkDeadline = NowMs() + kThinkBudgetMs;
+    if (think) thinkDeadline = NowMs() + static_cast<Clock>(std::clamp(AiInt("think_seconds", "10"), 3, 300)) * 1000;
     int code = Request(L"POST", L"/v1/chat/completions", BuildChatBody(userName, mode), 180000, onData);
 
     // Размышления не уложились в бюджет (или съели весь ответ) — просим ответить сразу, коротко и по шагам
@@ -465,8 +574,10 @@ Ai::Answer Ai::Ask(const std::string& prompt) {
 
 bool Ai::LooksLikeTask(const std::string& prompt) { return IsTask(prompt); }
 
-std::string Ai::Quiet(const std::string& prompt, const std::string& imageBase64, bool deep) {
-    EnsureAwake();
+std::string Ai::Quiet(const std::string& prompt, const std::string& imageBase64, bool deepRequested) {
+    const bool deep = deepRequested && ThinkMode() != 2;
+    BusyScope busy;
+    EnsureAwake(!imageBase64.empty());
     if (!g_app.aiReady) return {};
     const Settings cfg = Config::Get();
     const std::string userName = cfg.spokenName.empty() ? cfg.name : cfg.spokenName;
@@ -483,8 +594,7 @@ std::string Ai::Quiet(const std::string& prompt, const std::string& imageBase64,
         user = "[{\"type\":\"text\",\"text\":\"" + Json::Escape(prompt) + "\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/jpeg;base64," +
                imageBase64 + "\"}}]";
     // режим размышлений — с настройками, которые рекомендуют для Qwen: температура 0.6, top_p 0.95, top_k 20
-    const std::string sampling = deep ? "\"temperature\":0.6,\"top_p\":0.95,\"top_k\":20,\"max_tokens\":5000,"
-                                      : "\"temperature\":0.4,\"top_p\":0.9,\"max_tokens\":1400,";
+    const std::string sampling = Sampling(deep ? Kind::TelegramDeep : Kind::TelegramFast);
     const std::string body = "{\"stream\":false," + sampling +
                              "\"chat_template_kwargs\":{\"enable_thinking\":" + (deep ? "true" : "false") + "},\"messages\":["
                              "{\"role\":\"system\",\"content\":\"" + Json::Escape(system) + "\"},{\"role\":\"user\",\"content\":" + user + "}]}";
@@ -504,6 +614,7 @@ std::string Ai::Quiet(const std::string& prompt, const std::string& imageBase64,
 }
 
 std::string Ai::AskJson(const std::string& instruction, const std::string& request) {
+    BusyScope busy;
     EnsureAwake();
     if (!g_app.aiReady) return {};
     const std::string body = "{\"stream\":false,\"temperature\":0.2,\"max_tokens\":1200,\"response_format\":{\"type\":\"json_object\"},"
@@ -518,6 +629,35 @@ std::string Ai::AskJson(const std::string& instruction, const std::string& reque
     }
     const auto content = Json::FindStrings(response, "content", 1);
     return content.empty() ? std::string() : Text::Trim(StripThinking(content[0]));
+}
+
+const char* Ai::ProfileName(int index) {
+    if (index >= 0 && index < kProfiles - 1) return kPresets[index].name;
+    return "Свой";
+}
+
+int Ai::Profile() { return std::clamp(AiInt("profile", "0"), 0, kProfiles - 1); }
+
+void Ai::SetProfile(int index) {
+    index = std::clamp(index, 0, kProfiles - 1);
+    Config::SetValue("ai", "profile", std::to_string(index));
+    if (index < kProfiles - 1)
+        for (int i = 0; i < 6; ++i) {
+            Config::SetValue("ai", Key("chat", kFields[i]).c_str(), std::to_string(kPresets[index].chat[i]));
+            Config::SetValue("ai", Key("task", kFields[i]).c_str(), std::to_string(kPresets[index].task[i]));
+        }
+    ++g_tuningVersion;
+}
+
+int Ai::TuningVersion() { return g_tuningVersion.load(); }
+
+void Ai::ResetTuning() {
+    SetProfile(0);
+    const std::pair<const char*, const char*> kDefaults[] = { { "seed", "-1" }, { "think_mode", "0" }, { "think_seconds", "10" }, { "vision", "1" },
+                                      { "threads", "0" }, { "context", kContextSize }, { "parallel", "2" }, { "gpu_layers", "99" }, { "engine_args", "" }, { "extra_prompt", "" } };
+    for (const auto& [key, value] : kDefaults)
+        Config::SetValue("ai", key, value);
+    ++g_tuningVersion;
 }
 
 bool Ai::CanSee() { return g_vision && (g_app.aiReady || g_unloaded.load()); }

@@ -60,9 +60,9 @@ void Config::Load() {
     s.buttonPlates = ReadInt(L"button_plates", 0) != 0;
     s.tray = ReadInt(L"tray", 0) != 0;
     s.windowEffect = std::clamp(ReadInt(L"window_effect", 2), 0, 2);
-    s.windowOpacity = std::clamp(ReadInt(L"window_opacity", 70), 20, 100);
+    s.windowOpacity = std::clamp(ReadInt(L"window_opacity", 70), 0, 100);
     s.wallpaper = Text::ToUtf8(ReadString(L"wallpaper", L""));
-    s.wallpaperDim = std::clamp(ReadInt(L"wallpaper_dim", 45), 0, 90);
+    s.wallpaperDim = std::clamp(ReadInt(L"wallpaper_dim", 45), 0, 100);
     s.autoColors = ReadInt(L"auto_colors", 0) != 0;
     s.savedLook = ReadInt(L"saved_look", 0);
     s.savedLookColor = ReadInt(L"saved_look_color", 0x1C1030);
