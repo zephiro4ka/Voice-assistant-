@@ -169,7 +169,27 @@ int NeuralVoice::SampleRate() {
     return g_tts ? g_tts->getSampleRate() : 44100;
 }
 
-std::vector<std::string> NeuralVoice::Styles() { return { "F1", "F2", "F3", "F4", "F5", "F2+F4" }; }
+std::wstring NeuralVoice::VoicesFolder() {
+    const std::wstring dir = FindModelDir();
+    return dir.empty() ? std::wstring() : dir + L"\\voice_styles";
+}
+
+std::vector<std::string> NeuralVoice::Styles() {
+    std::vector<std::string> list = { "F1", "F2", "F3", "F4", "F5", "F2+F4", "M1", "M2", "M3", "M4", "M5" };
+    const std::wstring folder = VoicesFolder(); // свои файлы голосов из папки voice_styles
+    WIN32_FIND_DATAW data;
+    const HANDLE find = folder.empty() ? INVALID_HANDLE_VALUE : FindFirstFileW((folder + L"\\*.json").c_str(), &data);
+    if (find != INVALID_HANDLE_VALUE) {
+        do {
+            std::wstring name = data.cFileName;
+            name.resize(name.size() - 5);
+            const std::string style = Text::ToUtf8(name);
+            if (style.find('+') == std::string::npos && std::find(list.begin(), list.end(), style) == list.end()) list.push_back(style);
+        } while (FindNextFileW(find, &data));
+        FindClose(find);
+    }
+    return list;
+}
 
 std::vector<float> NeuralVoice::Synthesize(const std::string& text, const std::string& styleName, float speed, float pitchSemitones) {
     std::lock_guard lock(g_mutex);

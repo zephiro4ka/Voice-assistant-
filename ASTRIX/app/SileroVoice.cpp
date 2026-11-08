@@ -65,7 +65,7 @@ void SileroVoice::Start() { std::thread(StartBlocking).detach(); }
 
 bool SileroVoice::IsReady() { return g_ready; }
 
-std::vector<std::string> SileroVoice::Speakers() { return { "xenia", "kseniya", "baya" }; }
+std::vector<std::string> SileroVoice::Speakers() { return { "xenia", "baya", "aidar", "eugene" }; }
 
 std::vector<float> SileroVoice::Synthesize(const std::string& text, const std::string& speaker) {
     if (!g_ready) return {};

@@ -205,10 +205,12 @@ namespace {
         return g_process != nullptr;
     }
 
-    void StartBlocking() {
+    void StartBlocking(bool waking = false) {
         std::lock_guard startLock(g_startMutex);
-        g_app.aiReady = false;
-        g_app.aiChecked = false;
+        if (!waking) { // проснуться — не значит пропасть: пока модель грузится, вопросы ждут её, а не получают отказ
+            g_app.aiReady = false;
+            g_app.aiChecked = false;
+        }
 
         const auto models = DiscoverModels();
         const std::string model = PickModel(models, Config::Get().model);
@@ -245,6 +247,7 @@ namespace {
             }
             Sleep(400);
         }
+        if (waking && !Healthy()) g_app.aiReady = false;
         g_app.aiChecked = true;
     }
 
@@ -313,6 +316,17 @@ namespace {
         }
     }
 
+    // Модель сама не знает, какой сейчас день: сообщаем в каждом запросе
+    std::string CurrentMoment() {
+        static const char* kDays[] = { "воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота" };
+        static const char* kMonths[] = { "января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря" };
+        SYSTEMTIME t{};
+        GetLocalTime(&t);
+        char clock[16];
+        snprintf(clock, sizeof(clock), "%02u:%02u", t.wHour, t.wMinute);
+        return std::string("Сейчас ") + kDays[t.wDayOfWeek] + ", " + std::to_string(t.wDay) + " " + kMonths[t.wMonth - 1] + " " + std::to_string(t.wYear) + " года, время " + clock + ".";
+    }
+
     std::string SystemPrompt(const std::string& userName) {
         std::string friends;
         for (const auto& [spoken, handle] : Config::Contacts()) friends += (friends.empty() ? "" : ", ") + spoken;
@@ -322,6 +336,9 @@ namespace {
         const std::string extra = Text::Trim(Config::Value("ai", "extra_prompt", "")) + (aboutMe.empty() ? "" : " Что важно знать о пользователе: " + aboutMe);
         return (Text::Trim(extra).empty() ? std::string() : "Особые указания пользователя (важнее всего остального, кроме формата команд): " + extra + "\n\n") +
                "Ты — " + Config::Get().assistant + ", голосовая помощница-девушка. Пользователя зовут " + userName + ". " + Persona(Config::Get()) + " "
+               + CurrentMoment() + " Никогда не говори, что не знаешь дату или время. Время называй как человек: «восемь сорок девять вечера», а не «двадцать часов сорок девять минут». Не предлагай зайти к кому-то в чат или открыть браузер, если об этом не просили. "
+               "Тебя создал Зефир (его ещё зовут Зефирка или Мара, ник zephiro4ka) — он твой создатель и разработчик программы ASTRIX. Если спрашивают о создателе, называй его по имени "
+               "и говори о нём тепло и с благодарностью, в своём характере. Тот, кто сейчас с тобой говорит, может быть другим человеком. "
                "Ты живёшь на его компьютере и умеешь им управлять через свои команды.\n\n"
                "Если пользователь просит что-то СДЕЛАТЬ на компьютере — открыть программу или сайт, закрыть, зайти к кому-то в чат, "
                "поставить паузу, поменять громкость, напечатать текст, поставить таймер, найти в интернете — не отвечай словами. "
@@ -337,7 +354,7 @@ namespace {
                "какие вкладки открыты | перейди на вкладку <название> | громкость на <число> | сколько заряда | загрузка компьютера | прочитай выделенное\n"
                "пауза | продолжи | следующий трек | предыдущий трек | громче | тише | выключи звук\n"
                "напечатай <текст>\n"
-               "сверни все | сделай скриншот | заблокируй компьютер\n"
+               "сверни все | сделай скриншот | заблокируй компьютер | почисти память\n"
                "таймер на <число> минут | напомни через <число> минут <о чём>\n"
                "найди <запрос>\n"
                "Речь распознаётся с ошибками: «дискорт», «открать», «прощал» — догадайся, что имелось в виду. "
@@ -345,7 +362,7 @@ namespace {
                "Никогда не говори, что не можешь управлять компьютером.\n\n"
                "На обычные вопросы и разговор отвечай по-русски, коротко и в своём характере. "
                "Если просят помочь с учёбой или задачей — объясняй понятно и по шагам, но без лишней воды. "
-               "Ответ будет озвучен, поэтому без markdown, списков, эмодзи и кода.";
+               "Ответ будет озвучен, поэтому без markdown, списков, эмодзи и кода. Склоняй числа и даты правильно: «тридцать первое октября», «в тысяча девятьсот сорок первом году».";
     }
 
     // Начало ответа — это «КОМАНДА:»? Пока ответ короче метки, решить нельзя — ждём следующих слов.
@@ -441,6 +458,8 @@ namespace {
 
     // Перед вопросом: выгружена — загрузить снова (5–15 с)
     void EnsureAwake(bool eyes = false) {
+        static std::mutex s_wakeMutex;
+        std::lock_guard wake(s_wakeMutex); // загрузка уже идёт (начата заранее) — дождаться её
         g_lastUse = NowMs();
         const bool asleep = g_unloaded.exchange(false);
         if (!asleep && !(eyes && g_vision.load() && !g_engineEyes.load())) {
@@ -450,7 +469,7 @@ namespace {
         g_wantEyes = eyes;
         Caption::Set("просыпаюсь…", true);
         Log::Write("нейросеть: загружаю обратно");
-        StartBlocking();
+        StartBlocking(true);
         g_lastUse = NowMs();
     }
 }
@@ -458,17 +477,21 @@ namespace {
 // ---------------------------------------------------------------------
 void Ai::Start() {
     g_lastUse = NowMs();
-    if (Config::Value("ai", "preload", "0") == "1") std::thread(StartBlocking).detach();
+    if (Config::Value("ai", "preload", "0") == "1") std::thread([] { StartBlocking(); }).detach();
     else std::thread(PrepareLazy).detach();
     static bool s_watching = false;
     if (!s_watching) { s_watching = true; std::thread(IdleWatcher).detach(); }
+}
+
+void Ai::Prewarm() {
+    if (g_unloaded.load()) std::thread([] { EnsureAwake(); }).detach();
 }
 
 void Ai::Restart() {
     g_lastUse = NowMs();
     g_unloaded = false; // запуск сам загрузит модель
     g_wantEyes = false;
-    std::thread(StartBlocking).detach();
+    std::thread([] { StartBlocking(); }).detach();
 }
 
 Ai::Answer Ai::Ask(const std::string& prompt) {

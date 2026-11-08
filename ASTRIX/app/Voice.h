@@ -19,6 +19,8 @@ namespace Voice {
     void Start();
     void Shutdown();
 
+    // Как ответить: 0 — обычно, 1 — тихо (человек говорит тихо), 2 — громко (человек далеко)
+    void SetReplyLoudness(int mode);
     void Speak(const std::string& text);   // в очередь; не блокирует
     void Stop();                           // замолчать сразу и очистить очередь
     void ReloadVoice();                    // применить смену голоса в настройках

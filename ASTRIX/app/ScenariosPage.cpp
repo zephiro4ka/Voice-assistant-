@@ -803,11 +803,11 @@ bool ScenariosPage::Covers() { return g_open && g_anim > 0.97f; }
 float ScenariosPage::Visibility() { return g_anim; }
 
 void ScenariosPage::Draw(ImVec2 screen, float top, float dt) {
-    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * Theme::Ease(dt, 8.7f);
-    if (g_anim < 0.01f) return;
+    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * Theme::Ease(dt, g_open ? 13.0f : 24.0f); // старая страница исчезает сразу, не наезжая на новую
+    if (g_anim < 0.04f) return;
     const float ease = 1.0f - std::pow(1.0f - g_anim, 3.0f);
 
-    ImGui::SetNextWindowPos(ImVec2(0, top));
+    ImGui::SetNextWindowPos(ImVec2(Theme::PageShift(g_open, g_anim, screen.x), top));
     ImGui::SetNextWindowSize(ImVec2(screen.x, screen.y - top));
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ease);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));

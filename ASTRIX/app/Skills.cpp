@@ -4,6 +4,7 @@
 #include "Input.h"
 #include "FileSearch.h"
 #include "Launcher.h"
+#include "ProcessMonitor.h"
 #include "Messenger.h"
 #include "Pc.h"
 #include "PowerMode.h"
@@ -360,8 +361,14 @@ namespace {
     std::string TimeNow() {
         SYSTEMTIME t{};
         GetLocalTime(&t);
-        char buf[32];
-        sprintf_s(buf, "Сейчас %02u:%02u", t.wHour, t.wMinute);
+        // как говорят люди: «восемь сорок девять вечера», а не «двадцать сорок девять»
+        const char* part = t.wHour < 5 ? "ночи" : t.wHour < 12 ? "утра" : t.wHour < 17 ? "дня" : "вечера";
+        const int hour = t.wHour % 12 == 0 ? 12 : t.wHour % 12;
+        char buf[48];
+        if (t.wMinute == 0) {
+            if (hour == 1) sprintf_s(buf, "Сейчас ровно час %s", part);
+            else sprintf_s(buf, "Сейчас ровно %d %s", hour, part);
+        } else sprintf_s(buf, "Сейчас %d:%02u %s", hour, t.wMinute, part);
         return buf;
     }
 
@@ -839,8 +846,16 @@ static std::optional<std::string> HandleOne(const std::string& command) {
         if (auto r = Calculate(norm)) return r;
     if (auto r = Chance(norm)) return r;
 
-    if (HasAny(norm, { "который час", "сколько времени", "скажи время", "сколько сейчас времени" })) return TimeNow();
-    if (HasAny(norm, { "какое число", "какое сегодня число", "какой сегодня день", "какая сегодня дата", "какой день недели" })) return DateToday();
+    if (HasAny(norm, { "почисти память", "очисти память", "почисть память", "почисти озу", "очисти озу", "почисти оперативку", "очисти оперативку", "почисти оперативную", "очисти оперативную", "освободи память", "освободи оперативку", "очистка памяти", "очистка озу" })) {
+        const auto cleaned = ProcessMonitor::CleanMemory(false);
+        const double gb = cleaned.freed / 1073741824.0;
+        if (gb < 0.05) return "Почистила, но память и так почти свободна";
+        char text[64];
+        snprintf(text, sizeof(text), "Готово, освободила %d,%d гигабайта", static_cast<int>(gb), static_cast<int>(gb * 10) % 10);
+        return text;
+    }
+    if (HasAny(norm, { "который час", "сколько времени", "скажи время", "сколько сейчас времени", "сколько время", "какое время", "какой час", "сколько на часах", "какой сейчас час", "какое сейчас время", "сколько сейчас время" })) return TimeNow();
+    if (HasAny(norm, { "какое число", "какое сегодня число", "какой сегодня день", "какая сегодня дата", "какой день недели", "какая дата", "какое сейчас число", "какой сейчас день", "какой сегодня число" })) return DateToday();
 
     if (const std::string what = AfterVerb(command, { "скрой", "сверни", "спрячь", "убери" }); !what.empty() && !HasAny(norm, { "окн", "все" })) {
         if (const auto r = Launcher::Minimize(what); r.found) return "Спрятала " + r.name;

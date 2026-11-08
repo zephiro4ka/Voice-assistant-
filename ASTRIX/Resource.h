@@ -12,6 +12,7 @@
 #define IDI_ASTRIX			107
 #define IDI_SMALL				108
 #define IDB_LOGO				201
+#define IDB_LOGO_MASK			202
 #define IDC_ASTRIX			109
 #define IDC_MYICON				2
 #ifndef IDC_STATIC

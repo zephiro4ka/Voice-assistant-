@@ -58,6 +58,7 @@
 #include "app/DevProbe.h"
 #include "app/DiscordRpc.h"
 #include "app/MediaNow.h"
+#include "app/Overlay.h"
 #include "app/PowerMode.h"
 #include "app/ProcessMonitor.h"
 #include "app/SystemMonitor.h"
@@ -311,10 +312,10 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int sho
     StyleWindow(window);
     SetWindowIcons(window, instance);
     WTSRegisterSessionNotification(window, NOTIFY_FOR_THIS_SESSION); // узнавать о блокировке Windows
-    if (autostart) {
+    if (autostart || Config::Value("anya", "start_hidden", "0") == "1") {
         TrayIcon(window, true); // вместе с Windows — тихо, в трее
     } else {
-        ShowWindow(window, showCommand);
+        ShowWindow(window, showCommand == SW_SHOWMINIMIZED || showCommand == SW_SHOWMINNOACTIVE ? showCommand : SW_SHOWMAXIMIZED); // сразу на весь экран, но как обычное окно
         UpdateWindow(window);
     }
 
@@ -333,6 +334,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, LPWSTR commandLine, int sho
     Weather::Start(); // прогноз качается в фоне — для виджета и мгновенных ответов
     SystemMonitor::Start();
     MediaNow::Start();
+    Overlay::Start();
     Telegram::Start();
     DiscordRpc::Start();
     Ai::Start(); // нейросеть грузится в фоне, Аня уже отвечает

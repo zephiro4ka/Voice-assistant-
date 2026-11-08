@@ -14,6 +14,8 @@ namespace Widgets {
 
     // plate — рисовать подложку и без наведения (у кнопок окна её можно выключить в настройках)
     bool IconButton(const char* id, ImVec2 pos, float size, Icon icon, bool danger = false, bool plate = true);
+    bool Check(const char* label, bool* value);   // галочка: цветной квадратик и подпись
+    bool Radio(const char* label, bool active);   // выбор одного из нескольких: кнопка-таблетка
     bool Toggle(const char* id, ImVec2 pos, bool* value, ImU32 accent);
     bool Chip(const char* id, ImVec2 pos, const char* label, ImVec2* outSize = nullptr);
     // Кружок цвета (любимый цвет); выбранный — с кольцом
@@ -24,7 +26,7 @@ namespace Widgets {
     // Выпадающий список — тёмная «таблетка» со стрелкой ⌄ (как BeginCombo/EndCombo, но в стиле Ани)
     bool BeginCombo(const char* id, const char* preview, float width, int flags = 0);
     void EndCombo();
-    bool ComboItem(const char* label, bool selected); // пункт списка: крупный, у выбранного — ✓
+    bool ComboItem(const char* label, bool selected, ImFont* font = nullptr); // пункт списка: крупный, у выбранного — ✓
     bool Combo(const char* id, int* current, const char* const items[], int count, float width);
     // Тонкий ползунок с круглой ручкой и значением справа; true — значение меняется
     bool Slider(const char* id, int* value, int min, int max, const char* format, float width);

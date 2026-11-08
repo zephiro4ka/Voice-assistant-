@@ -236,6 +236,9 @@ xcopy /y /d /q /i "$(ProjectDir)third_party\llama.cpp\*" "$(OutDir)llama.cpp\"</
     <ClInclude Include="app\Pult.h" />
     <ClInclude Include="app\Rates.h" />
     <ClInclude Include="app\Logo.h" />
+    <ClInclude Include="app\Tour.h" />
+    <ClInclude Include="app\Overlay.h" />
+    <ClInclude Include="app\ModelStore.h" />
     <ClInclude Include="app\FileSearch.h" />
     <ClInclude Include="app\CozyArt.h" />
     <ClInclude Include="app\RemoteDesktopPage.h" />
@@ -339,6 +342,9 @@ xcopy /y /d /q /i "$(ProjectDir)third_party\llama.cpp\*" "$(OutDir)llama.cpp\"</
     <ClCompile Include="app\Pult.cpp" />
     <ClCompile Include="app\Rates.cpp" />
     <ClCompile Include="app\Logo.cpp" />
+    <ClCompile Include="app\Tour.cpp" />
+    <ClCompile Include="app\Overlay.cpp" />
+    <ClCompile Include="app\ModelStore.cpp" />
     <ClCompile Include="app\FileSearch.cpp" />
     <ClCompile Include="app\CozyArt.cpp" />
     <ClCompile Include="app\PowerMode.cpp" />

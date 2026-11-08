@@ -25,14 +25,13 @@ struct Settings {
     int pitch = 6;            // -10..10, высота голосов Windows
     int neuralPitch = 0;      // -6..6, высота нейроголоса (0 — естественно, без обработки)
     int rate = 1;             // -10..10
-    bool wakeWord = true;     // true: слушаю всегда и жду «Аня»; false: нажми и говори
+    bool wakeWord = false;    // true: слушаю всегда и жду «Аня»; false: нажми и говори
     std::string model;        // путь к модели нейросети (.gguf); пусто = авто
     Personality personality = Personality::Balanced;
     std::string customPrompt;  // свой характер, если выбран Personality::Custom
-    int silenceMs = 850;      // сколько тишины считать концом фразы (меньше — режет фразу на паузах)
+    int silenceMs = 650;      // сколько тишины считать концом фразы (меньше — режет фразу на паузах)
     bool bodySounds = true;   // «Будь здоров!» на чих и «Всё в порядке?» на кашель
     SearchEngine search = SearchEngine::Google;
-    bool alwaysOnTop = false; // окно поверх всех (удобно поверх игры)
     bool quickPhrases = false; // подсказки-фразы под полем ввода
     bool weatherWidget = true;
 

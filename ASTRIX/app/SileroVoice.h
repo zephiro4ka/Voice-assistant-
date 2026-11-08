@@ -13,7 +13,7 @@ namespace SileroVoice {
     void Start();       // в фоне: запустить сервер и загрузить модель (~10 с)
     bool IsReady();
 
-    // Женские голоса: xenia, kseniya, baya
+    // Голоса: xenia, baya (женские), aidar, eugene (мужские)
     std::vector<std::string> Speakers();
     std::vector<float> Synthesize(const std::string& text, const std::string& speaker);
 

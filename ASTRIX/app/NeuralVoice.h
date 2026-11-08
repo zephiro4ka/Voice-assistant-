@@ -11,6 +11,7 @@ namespace NeuralVoice {
     int SampleRate();
 
     // Доступные голоса: F1…F5 и «милый» (смесь F2 и F4). Смесь задаётся через «+»: "F2+F4".
+    std::wstring VoicesFolder();           // куда класть свои голоса
     std::vector<std::string> Styles();
     // Синтез одной фразы. speed: 1.0 — обычно, больше — быстрее.
     // pitchSemitones: на сколько полутонов поднять голос (темп при этом не меняется).

@@ -12,6 +12,8 @@
 #include <sphelper.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -51,14 +53,28 @@ namespace {
             g_app.lastLatencyMs = static_cast<int>(NowMs() - endedAt);
     }
 
+    std::atomic<int> g_replyMode{ 0 };
+
+    // Живая речь: громкость подстраивается под собеседника и немного гуляет от фразы к фразе
+    void ShapeLoudness(std::vector<float>& wav, const std::string& text) {
+        static unsigned s_phrase = 0;
+        ++s_phrase;
+        const int mode = g_replyMode.load();
+        float gain = mode == 1 ? 0.38f : mode == 2 ? 1.6f : 1.0f;
+        gain *= 0.92f + 0.14f * std::fabs(std::sin(s_phrase * 1.7f));   // то чуть тише, то чуть громче
+        if (text.find('!') != std::string::npos) gain *= 1.12f;         // восклицание — ярче
+        for (float& v : wav) v = gain > 1.0f ? std::tanh(v * gain) : v * gain; // громче — без хрипа на пиках
+    }
+
     // ================================================================ нейроголос
     void SpeakNeural(const std::string& text, const std::string& style) {
         const Settings cfg = Config::Get();
-        const float speed = 1.0f + cfg.rate * 0.06f;
+        const float speed = (1.0f + cfg.rate * 0.06f) * (g_replyMode.load() == 1 ? 0.94f : 1.0f); // тихий ответ — неторопливый
         const float semitones = cfg.neuralPitch / 3.0f; // 0 — естественный голос; каждые 3 деления — полутон
         std::vector<float> wav = NeuralVoice::Synthesize(Text::NumbersToWords(text), style, speed, semitones);
         if (wav.empty() || g_stop) return;
         MarkFirstSound();
+        ShapeLoudness(wav, text);
         AudioOut::Push(wav, NeuralVoice::SampleRate()); // играет в фоне — тем временем готовим следующую фразу
     }
 
@@ -71,6 +87,7 @@ namespace {
         if (wav.empty()) return false;
         if (g_stop) return true;
         MarkFirstSound();
+        ShapeLoudness(wav, text);
         AudioOut::Push(wav, SileroVoice::kSampleRate);
         return true;
     }
@@ -183,20 +200,35 @@ namespace {
             std::vector<Voice::Info> voices;
             if (speakers) { // Silero — самые живые голоса, поэтому первыми (и по умолчанию)
                 static const std::pair<const char*, const wchar_t*> kSilero[] = {
-                    { "xenia", L"Silero — Ксения (живой)" }, { "kseniya", L"Silero — Ксения 2 (живой)" }, { "baya", L"Silero — Байя (живой)" } };
-                for (const auto& [speaker, name] : kSilero) voices.push_back({ name, L"silero:" + Text::ToWide(speaker), true, true, true });
+                    { "xenia", L"Silero — Ксения (живой)" }, { "baya", L"Silero — Байя (живой)" },
+                    { "aidar", L"Silero — Айдар (живой, мужской)" }, { "eugene", L"Silero — Евгений (живой, мужской)" } };
+                for (const auto& [speaker, name] : kSilero) voices.push_back({ name, L"silero:" + Text::ToWide(speaker), true, true, speaker[0] == 'x' || speaker[0] == 'b' });
             }
             if (speakers) { // в списке — всегда; модель загрузится, когда голос выберут
                 for (const auto& style : NeuralVoice::Styles()) {
                     const bool blend = style.find('+') != std::string::npos;
-                    const std::wstring name = blend ? L"Нейроголос — милый" : L"Нейроголос " + Text::ToWide(style.substr(1)) + L" (живой)";
-                    voices.push_back({ name, L"neural:" + Text::ToWide(style), true, true, true });
+                    const bool male = style[0] == 'M';
+                    const bool builtIn = blend || (style.size() == 2 && (style[0] == 'F' || style[0] == 'M') && style[1] >= '1' && style[1] <= '5');
+                    const std::wstring name = !builtIn ? L"Свой голос — " + Text::ToWide(style)
+                                            : blend ? L"Нейроголос — милый" : L"Нейроголос " + Text::ToWide(style.substr(1)) + (male ? L" (живой, мужской)" : L" (живой)");
+                    voices.push_back({ name, L"neural:" + Text::ToWide(style), true, true, !male });
                 }
             }
             EnumerateSapi(SPCAT_VOICES, voices); // классические голоса Windows
             EnumerateSapi(L"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech_OneCore\\Voices", voices);
+            std::vector<Voice::Info> unique; // один и тот же голос Windows числится в двух списках
+            std::vector<std::wstring> seen;
+            for (const auto& v : voices) {
+                std::wstring key = v.name;
+                if (key.rfind(L"Microsoft ", 0) == 0) key.erase(0, 10);
+                key = key.substr(0, key.find(L" - "));
+                if (const size_t at = key.find(L" Desktop"); at != std::wstring::npos) key.erase(at);
+                if (std::find(seen.begin(), seen.end(), key) != seen.end()) continue;
+                seen.push_back(key);
+                unique.push_back(v);
+            }
             std::lock_guard lock(g_voicesMutex);
-            g_voices = std::move(voices);
+            g_voices = std::move(unique);
         }
         if (!speakers && !sapi) {
             Chat::Add(Role::System, "Не удалось запустить ни один голос.");
@@ -241,7 +273,6 @@ namespace {
             std::lock_guard lock(g_mutex);
             if (g_queue.empty() && !AudioOut::IsPlaying()) {
                 g_app.speaking = false;
-                g_app.followUpUntil = NowMs() + 8000; // ответ закончен — можно продолжить без «Аня»
             }
         }
         AudioOut::Shutdown();
@@ -260,6 +291,8 @@ void Voice::Shutdown() {
     g_cv.notify_all();
     if (g_thread.joinable()) g_thread.join();
 }
+
+void Voice::SetReplyLoudness(int mode) { g_replyMode = mode; }
 
 void Voice::Speak(const std::string& text) {
     const Settings cfg = Config::Get();

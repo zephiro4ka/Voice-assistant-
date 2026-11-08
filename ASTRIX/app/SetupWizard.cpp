@@ -2,6 +2,7 @@
 
 #include "Autostart.h"
 #include "DiscordRpc.h"
+#include "Platform.h"
 #include "Settings.h"
 #include "Telegram.h"
 #include "TextUtils.h"
@@ -14,6 +15,8 @@
 #include <cstdio>
 #include <string>
 #include <thread>
+
+#include <shellapi.h>
 
 using Theme::Px;
 
@@ -122,7 +125,7 @@ void SetupWizard::Draw(ImVec2 screen, float top, float dt) {
     ImGui::Begin("##setupWizard", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    const float width = std::min(Px(560), screen.x - Px(40)), height = std::min(Px(470), screen.y - top - Px(40));
+    const float width = std::min(Px(560), screen.x - Px(40)), height = std::min(Px(510), screen.y - top - Px(40));
     const ImVec2 card(screen.x * 0.5f - width * 0.5f + (1.0f - stepEase) * Px(40) * g_direction,
                       std::max(top + Px(10), screen.y * 0.5f - height * 0.5f) + (1.0f - ease) * Px(24));
     const ImVec2 cardMax(card.x + width, card.y + height);
@@ -172,10 +175,15 @@ void SetupWizard::Draw(ImVec2 screen, float top, float dt) {
         ToggleRow("Запускать вместе с Windows (тихо, в трее)", "##wAuto", &g_autostart, inner);
         break;
     case 2:
-        ImGui::TextDisabled("Необязательно — можно пропустить и настроить потом. Бот даёт управлять компьютером с телефона; "
-                            "токен выдаёт @BotFather, свой ID подскажет @userinfobot.");
+        ImGui::TextDisabled("Это необязательно! Не знаешь, что это, — смело жми «пропустить». Подробная инструкция по шагам есть в настройках, раздел «Связь».");
         ImGui::PopFont();
-        ImGui::Dummy(ImVec2(0, Px(12)));
+        ImGui::Dummy(ImVec2(0, Px(6)));
+        if (ImGui::SmallButton("  сделать бота  ")) ShellExecuteW(nullptr, L"open", L"https://t.me/BotFather", nullptr, nullptr, SW_SHOWNORMAL);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("  узнать свой ID  ")) ShellExecuteW(nullptr, L"open", L"https://t.me/userinfobot", nullptr, nullptr, SW_SHOWNORMAL);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("  страница Discord  ")) ShellExecuteW(nullptr, L"open", L"https://discord.com/developers/applications", nullptr, nullptr, SW_SHOWNORMAL);
+        ImGui::Dummy(ImVec2(0, Px(8)));
         Field("Токен телеграм-бота", "##wToken", g_token, sizeof(g_token), "123456:ABC… от @BotFather", inner, ImGuiInputTextFlags_Password);
         Field("Твой ID в телеграме — бот слушается только тебя", "##wOwner", g_owner, sizeof(g_owner), "например, 123456789", inner, ImGuiInputTextFlags_CharsDecimal);
         Field("Application ID приложения Discord (статус «Играет»)", "##wDiscord", g_discord, sizeof(g_discord), "с discord.com/developers", inner, ImGuiInputTextFlags_CharsDecimal);

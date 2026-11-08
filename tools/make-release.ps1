@@ -9,8 +9,8 @@ $project = Join-Path $root 'ASTRIX'
 $release = Join-Path $project 'x64\Release'
 $dist = Join-Path $root 'dist\ASTRIX'
 
+$msbuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\amd64\MSBuild.exe' | Select-Object -First 1
 if (-not $NoBuild) {
-    $msbuild = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\amd64\MSBuild.exe' | Select-Object -First 1
     if (-not $msbuild) { throw 'Не нашла MSBuild — установи Visual Studio с «Разработкой классических приложений на C++»' }
     # запущенный ASTRIX.exe не перезаписать — закрываем его на время сборки и потом запускаем снова
     $exe = Join-Path $release 'ASTRIX.exe'
@@ -61,6 +61,11 @@ if ($Installer) {
     if (-not $iscc) { throw 'Нужен Inno Setup: winget install JRSoftware.InnoSetup' }
     & $iscc /Q (Join-Path $PSScriptRoot 'installer.iss')
     if ($LASTEXITCODE -ne 0) { throw 'Установщик не собрался' }
+    # Красивое окно установщика: внутрь него вшивается собранный выше ASTRIX-Engine.exe
+    if (-not $msbuild) { throw 'Не нашла MSBuild — окно установщика собирается в Visual Studio' }
+    & $msbuild (Join-Path $PSScriptRoot 'setup-ui\SetupUi.vcxproj') /t:Rebuild /p:Configuration=Release /p:Platform=x64 /m /v:m /nologo
+    if ($LASTEXITCODE -ne 0) { throw 'Окно установщика не собралось' }
     $setup = Join-Path $root 'dist\ASTRIX-Setup.exe'
+    Copy-Item (Join-Path $root 'dist\setup-build\ASTRIX-Setup.exe') $setup -Force
     Write-Host "Готово: $setup ($([math]::Round((Get-Item $setup).Length / 1MB)) МБ)"
 }

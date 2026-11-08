@@ -13,6 +13,7 @@ Clock NowMs();
 struct AppState {
     std::atomic<bool> running{ true };
     std::atomic<bool> micEnabled{ true };     // F8
+    std::atomic<bool> setupOpen{ false };     // знакомство или обучение: ничего не слушаем
     std::atomic<bool> audioReady{ false };    // микрофон и whisper готовы
     std::atomic<bool> capturing{ false };     // сейчас идёт фраза
     std::atomic<bool> transcribing{ false };  // whisper распознаёт

@@ -121,13 +121,9 @@ namespace {
     // Пример, чтобы было понятно, как это устроено
     std::vector<Scenarios::Scenario> Example() {
         Scenarios::Scenario s;
-        s.name = "Уютный вечер";
-        s.phrase = "уютный вечер";
-        s.blocks = { { Scenarios::Step::OpenLink, "https://www.kinopoisk.ru", 2, static_cast<int>(Scenarios::Position::FullScreen), 0 },
-                     { Scenarios::Step::Launch, "NTE", 1, 0, 0 },
-                     { Scenarios::Step::Place, "", 1, static_cast<int>(Scenarios::Position::Maximize), 0 },
-                     { Scenarios::Step::Volume, "", 1, 0, 40 },
-                     { Scenarios::Step::Say, "Уютного вечера!", 1, 0, 0 } };
+        s.name = "Запуск браузера";
+        s.phrase = "запусти браузер";
+        s.blocks = { { Scenarios::Step::OpenLink, "https://www.google.com", 0, 0, 0 } };
         return { s };
     }
 }

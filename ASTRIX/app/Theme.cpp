@@ -42,7 +42,8 @@ namespace {
     constexpr int kHandwriting = kFaceCount - 1;
     int g_face = 0, g_fontScale = 100, g_cozyPattern = 0;
     float g_systemDpi = 1.0f; // масштаб Windows; Theme::dpi — он же с учётом «Размера интерфейса»
-    bool g_cozyDark = false, g_paper = false;
+    bool g_cozyDark = false, g_paper = false, g_prebake = true;
+    int g_doodleColor = -1;
     bool g_cozy = false, g_optionsRead = false, g_fontsDirty = false;
 
     std::string FontFileOf(const std::string& registryName) { // файл шрифта по его имени в Windows
@@ -174,7 +175,7 @@ void Theme::LoadFonts() {
     std::string regular = chosen.regular, bold = chosen.bold;
     if (g_face == 0 && !g_cozy) SystemFont(regular, bold);
     struct { const char* regular; const char* bold; } face{ regular.c_str(), bold.c_str() };
-    const float k = 1.14f; // текст крупнее, а блоки того же размера
+    const float k = 1.55f; // текст крупнее, а блоки того же размера
     body = LoadFont(face.regular, Px(15.5f * k));
     semibold = LoadFont(face.bold, Px(13.5f * k));
     title = LoadFont(face.bold, Px(16.0f * k));
@@ -238,7 +239,17 @@ Theme::Color Theme::AccentPreset(int index) {
 
 void Theme::Apply(const Settings& s) {
     ReadOptions();
-    if (g_fontsDirty) { g_fontsDirty = false; LoadFonts(); }
+    if (g_fontsDirty) { g_fontsDirty = false; LoadFonts(); g_prebake = true; }
+    if (g_prebake) { // все буквы готовим заранее: иначе первое появление новых букв при переходе даёт рывок
+        g_prebake = false;
+        for (ImFont* font : { body, semibold, title, display, hero }) {
+            if (!font) continue;
+            ImFontBaked* baked = font->GetFontBaked(font->LegacySize);
+            for (ImWchar c = 0x20; c < 0x7F; ++c) baked->FindGlyph(c);
+            for (ImWchar c = 0x410; c <= 0x451; ++c) baked->FindGlyph(c);
+            for (ImWchar c : { 0x401, 0x2014, 0xAB, 0xBB, 0x2026, 0x2192, 0xB0 }) baked->FindGlyph(static_cast<ImWchar>(c));
+        }
+    }
     g_accent = s.accent >= kAccentPresets ? FromRgb(s.accentColor) : AccentPreset(s.accent);
     g_look = LookPreset(static_cast<int>(s.look), s.lookColor);
     if (s.backgroundColor >= 0) { // свой цвет фона поверх темы
@@ -248,18 +259,23 @@ void Theme::Apply(const Settings& s) {
     g_glass = s.glass;
     g_plates = s.buttonPlates;
     g_paper = g_cozy && !g_cozyDark;
-    if (g_paper) {
-        g_look = { { 251, 245, 230 }, { 243, 232, 209 }, { 255, 251, 241 } };
-        g_accent = g_accent.Mix({ 120, 70, 45 }, 0.45f); // на бумаге нужен цвет чернил поглубже
-        g_glass = false;
-    } else if (g_cozy) { // ночная тетрадь: тёплый тёмный лист и мел
-        g_look = { { 42, 37, 46 }, { 28, 25, 33 }, { 54, 48, 58 } };
-        g_accent = g_accent.Mix({ 250, 205, 150 }, 0.45f);
+    g_doodleColor = s.animationColor;
+    if (g_cozy) { // тетрадь слушается настроек цвета; без них — свой тёплый лист
+        if (s.backgroundColor >= 0) {
+            const Color base = FromRgb(s.backgroundColor);
+            g_paper = base.r * 0.3f + base.g * 0.59f + base.b * 0.11f > 140.0f; // светлый лист — тёмные чернила, тёмный — мел
+            g_look = { base, base.Mix({ 0, 0, 0 }, g_paper ? 0.07f : 0.3f), base.Mix({ 255, 255, 255 }, g_paper ? 0.6f : 0.12f) };
+        } else if (g_paper) {
+            g_look = { { 251, 245, 230 }, { 243, 232, 209 }, { 255, 251, 241 } };
+        } else if (static_cast<int>(s.look) == 0) {
+            g_look = { { 42, 37, 46 }, { 28, 25, 33 }, { 54, 48, 58 } };
+        }
+        if (g_paper) g_accent = g_accent.Mix({ 90, 55, 40 }, 0.2f); // бледный цвет на бумаге не видно
         g_glass = false;
     }
     kInk = g_paper ? IM_COL32(58, 46, 38, 255) : IM_COL32(244, 239, 250, 255);
-    kInkSoft = g_paper ? IM_COL32(58, 46, 38, 195) : IM_COL32(244, 239, 250, 170);
-    kInkMuted = g_paper ? IM_COL32(58, 46, 38, 145) : IM_COL32(244, 239, 250, 110);
+    kInkSoft = g_paper ? IM_COL32(58, 46, 38, 225) : IM_COL32(244, 239, 250, 220);
+    kInkMuted = g_paper ? IM_COL32(58, 46, 38, 190) : IM_COL32(244, 239, 250, 175);
 
     ImVec4* c = ImGui::GetStyle().Colors;
     auto accent = [&](float a) { return ImGui::ColorConvertU32ToFloat4(g_accent.WithAlpha(a)); };
@@ -298,6 +314,19 @@ ImU32 Theme::Overlay(int alpha) {
 
 int Theme::FontCount() { return kFaceCount; }
 const char* Theme::FontName(int index) { return kFaces[std::clamp(index, 0, kFaceCount - 1)].name; }
+ImFont* Theme::FontPreview(int index) {
+    index = std::clamp(index, 0, kFaceCount - 1);
+    static ImFont* cache[kFaceCount] = {};
+    static bool tried[kFaceCount] = {};
+    if (!tried[index]) {
+        tried[index] = true;
+        std::string regular = kFaces[index].regular, bold = kFaces[index].bold;
+        if (index == 0) SystemFont(regular, bold);
+        cache[index] = LoadFont(regular.c_str(), Px(21.0f));
+    }
+    return cache[index] ? cache[index] : body;
+}
+
 int Theme::FontIndex() { ReadOptions(); return g_face; }
 int Theme::FontScale() { ReadOptions(); return g_fontScale; }
 
@@ -310,6 +339,7 @@ void Theme::SetFont(int index, int scale) {
     g_fontsDirty = true;
 }
 
+int Theme::DoodleColor() { return g_doodleColor; }
 bool Theme::Cozy() { ReadOptions(); return g_cozy; }
 bool Theme::CozyDark() { ReadOptions(); return g_cozyDark; }
 bool Theme::Paper() { return Cozy() && !g_cozyDark; }

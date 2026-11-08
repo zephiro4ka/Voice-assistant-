@@ -5,7 +5,12 @@
 #include "Log.h"
 #include "Settings.h"
 #include "ProcessesPage.h"
+#include "CozyArt.h"
+#include "Ears.h"
+#include "ModelStore.h"
+#include "Overlay.h"
 #include "RemoteDesktop.h"
+#include "Tour.h"
 #include "ScenariosPage.h"
 #include "SettingsPage.h"
 #include "TextUtils.h"
@@ -87,6 +92,16 @@ namespace {
             }).detach();
             return;
         }
+        if (cmd == "asrbench") { std::string file; in >> file; Ears::Bench(file); return; }
+        if (cmd == "overlaydump") { std::string folder; in >> folder; Overlay::Dump(folder); return; }
+        if (cmd == "numtest") {
+            for (const char* t : { "Сегодня 31 октября.", "до 31 октября", "Это было в 1888 году.", "1991 год", "осталось 21 минута", "13 марта", "2 января", "тридцать первый октября" })
+                Log::Write(std::string("numtest: ") + t + " → " + Text::NumbersToWords(t));
+            return;
+        }
+        if (cmd == "mascot") { int n = 0; in >> n; CozyArt::SetMascot(n); return; }
+        if (cmd == "tour") { int n = 0; in >> n; Tour::GoTo(n); return; }
+        if (cmd == "modeldl") { int n = 0; in >> n; ModelStore::Download(n, false); return; }
         if (cmd == "remote_stop") { RemoteDesktop::Stop(); return; }
         if (cmd == "ask") { std::string rest; std::getline(in, rest); Brain::Submit(Text::Trim(rest)); return; } // как будто сказали Ане
     }

@@ -1,4 +1,7 @@
 #include "Brain.h"
+#include "Ears.h"
+
+namespace { constexpr float kAskAgainBelow = 0.40f; }
 
 #include "Browser.h"
 #include "Chatter.h"
@@ -186,7 +189,6 @@ void Brain::OnHeard(const std::string& text) {
     }
 
     const bool direct = g_app.pttArmed.exchange(false) || NowMs() < g_app.followUpUntil.load();
-    const bool needWakeWord = Config::Get().wakeWord;
 
     std::string command;
     const bool called = Text::FindWakeWord(text, command, Config::Get().assistant);
@@ -197,7 +199,15 @@ void Brain::OnHeard(const std::string& text) {
         Voice::Speak("Да?");
         return;
     }
-    if (direct || !needWakeWord) {
+    // обращаются к ней, но слова разобрались плохо — лучше переспросить, чем сделать не то
+    if ((direct || called) && Ears::LastConfidence() < kAskAgainBelow) {
+        Log::Write("  не уверена в расслышанном — переспрашиваю");
+        g_app.followUpUntil = NowMs() + 9000;
+        Caption::Set("не расслышала, повтори, пожалуйста ✦", true);
+        Voice::Speak("Не расслышала, повтори, пожалуйста");
+        return;
+    }
+    if (direct) { // нажали на шар или только что сказали её имя
         Submit(called ? command : text);
         return;
     }
@@ -227,7 +237,6 @@ void Brain::OnBodySound(BodySounds::Kind kind) {
     Chat::Add(Role::Anya, phrase);
     Caption::Set(phrase);
     Voice::Speak(phrase);
-    g_app.followUpUntil = NowMs() + 9000; // можно ответить «да, всё хорошо» без «Аня»
 }
 
 void Brain::ToggleListening() {

@@ -1,0 +1,3 @@
+1 ICON "..\\..\\assets\\astrix.ico"
+ENGINE RCDATA "..\\..\\dist\\ASTRIX-Engine.exe"
+LOGO RCDATA "..\\..\\assets\\setup-logo.png"

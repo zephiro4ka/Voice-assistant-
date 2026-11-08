@@ -7,7 +7,9 @@
 #include "TextUtils.h"
 #include "Theme.h"
 #include "HomeLayout.h"
+#include "CozyArt.h"
 #include "Logo.h"
+#include "Tour.h"
 #include "SetupWizard.h"
 #include "Visuals.h"
 #include "Voice.h"
@@ -84,7 +86,7 @@ namespace {
     void ApplyWindowOptions(const Settings& s) {
         static int s_onTop = -1, s_effect = -1;
         if (!g_window) return;
-        const int onTop = s.alwaysOnTop ? 1 : 0;
+        const int onTop = 0; // главное окно ведёт себя как обычное; поверх других — только оверлеи
         if (onTop != s_onTop) {
             s_onTop = onTop;
             SetWindowPos(g_window, onTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -108,6 +110,7 @@ namespace {
         }
         std::string picked;
         if (!Wallpaper::Picked(picked)) return;
+        if (CozyArt::TakePicked(picked)) return; // картинку выбирали для персонажа, а не для обоев
         if (!Wallpaper::Load(picked)) { Caption::Set("не получилось открыть эту картинку"); return; }
         s_loaded = picked;
         Config::Update([&](Settings& x) { x.wallpaper = picked; });
@@ -199,7 +202,7 @@ namespace {
         if (ImGui::IsItemDeactivatedAfterEdit()) SaveNav();
         if (tab != 3) {
             bool shown = !g_nav.hidden[tab];
-            if (ImGui::Checkbox("показывать вкладку", &shown)) { g_nav.hidden[tab] = !shown; SaveNav(); ImGui::CloseCurrentPopup(); }
+            if (Widgets::Check("показывать вкладку", &shown)) { g_nav.hidden[tab] = !shown; SaveNav(); ImGui::CloseCurrentPopup(); }
         } else {
             ImGui::TextDisabled("«Настройки» не прячется — иначе не выключить правку");
         }
@@ -207,7 +210,7 @@ namespace {
         ImGui::TextDisabled("все вкладки");
         static const char* kStyles[] = { "значок и текст", "только значки", "только текст" };
         for (int s = 0; s < 3; ++s)
-            if (ImGui::RadioButton(kStyles[s], g_nav.style == s)) { g_nav.style = s; SaveNav(); }
+            if (Widgets::Radio(kStyles[s], g_nav.style == s)) { g_nav.style = s; SaveNav(); }
         ImGui::Separator();
         if (ImGui::Button("вернуть меню как было")) {
             for (int t = 0; t < kNavCount; ++t) { g_nav.order[t] = t; g_nav.hidden[t] = false; g_nav.labels[t].clear(); }
@@ -299,6 +302,14 @@ namespace {
                 // открыта только одна страница; повторный клик по своей вкладке — назад на главную
                 const int id = tabs[i].id;
                 const bool again = id == open;
+                { // экран уезжает в сторону, где стоит новая вкладка
+                    int from = 0, to = i;
+                    for (int j = 0; j < static_cast<int>(tabs.size()); ++j) {
+                        if (tabs[j].id == open) from = j;
+                        if (again && tabs[j].id == 0) to = j;
+                    }
+                    Theme::pageDirection = to >= from ? 1 : -1;
+                }
                 if (SettingsPage::IsOpen() && (id != 3 || again)) SettingsPage::Close();
                 if (ScenariosPage::IsOpen() && (id != 1 || again)) ScenariosPage::Close();
                 if (ProcessesPage::IsOpen() && (id != 2 || again)) ProcessesPage::Close();
@@ -656,6 +667,8 @@ void Ui::Frame(float dt, bool active) {
     ProcessesPage::Draw(screen, g_titleHeight, dt);
     SettingsPage::Draw(screen, g_titleHeight, dt);
     SetupWizard::Draw(screen, g_titleHeight, dt);
+    Tour::Draw(screen, dt, SetupWizard::IsOpen());
+    g_app.setupOpen = SetupWizard::IsOpen() || Tour::Active();
     Toast::Draw(screen, dt);
     ApplyWindowOptions(settings);
 }

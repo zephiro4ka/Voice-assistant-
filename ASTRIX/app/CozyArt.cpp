@@ -1,5 +1,8 @@
 #include "CozyArt.h"
 
+#include "Logo.h"
+#include "Settings.h"
+#include "Wallpaper.h"
 #include "Theme.h"
 
 #include <algorithm>
@@ -10,7 +13,7 @@ using Theme::Px;
 
 namespace {
     constexpr float kPi = 3.14159265f;
-    enum Shape { Star, Heart, Spiral, Cube, Flower, Cloud, Sun, Squiggle, Triangle, Parabola, CircleRadius, Atom, Wave, Pendulum, Lens, Benzene, Flask, Staff, Cat, Question, Hatch, Crosses, Mug, Note, Sparkle, Tangle, kShapes };
+    enum Shape { Star, Heart, Spiral, Cube, Flower, Cloud, Sun, Squiggle, Triangle, Parabola, CircleRadius, Atom, Wave, Pendulum, Lens, Benzene, Flask, Staff, Cat, Question, Hatch, Crosses, Mug, Note, Sparkle, Tangle, Rocket, Planet, Moon, Pizza, Donut, Cupcake, Dice, Gamepad, Book, Pencil, Fish, Paw, Ghost, Crown, Bolt, Smile, Tree, House, Arrow, kShapes };
 
     float Hash(int a, int b) {
         const float v = std::sin(a * 127.1f + b * 311.7f) * 43758.5453f;
@@ -171,6 +174,73 @@ namespace {
         case Tangle:
             p.Curve([](float t) { return std::sin(t * 3) * .34f + std::cos(t * 7) * .12f; }, [](float t) { return std::cos(t * 2) * .22f + std::sin(t * 5) * .1f; }, 120, 0, 2 * kPi);
             break;
+        case Rocket:
+            p.Line({ {0,-.5f},{.16f,-.18f},{.16f,.25f},{-.16f,.25f},{-.16f,-.18f},{0,-.5f} });
+            p.Line({ {-.16f,.05f},{-.32f,.32f},{-.16f,.25f} }); p.Line({ {.16f,.05f},{.32f,.32f},{.16f,.25f} });
+            p.Ellipse(0, -.1f, .07f, .07f); p.Line({ {-.07f,.3f},{0,.5f},{.07f,.3f} });
+            break;
+        case Planet: p.Ellipse(0, 0, .26f, .26f); p.Ellipse(0, 0, .5f, .12f, -.35f); break;
+        case Moon:
+            p.Curve([](float t) { return std::cos(t) * .38f; }, [](float t) { return std::sin(t) * .38f; }, 30, .9f, 5.4f);
+            p.Curve([](float t) { return .24f + std::cos(t) * .28f; }, [](float t) { return std::sin(t) * .3f; }, 18, 1.1f, 5.2f);
+            break;
+        case Pizza:
+            p.Line({ {0,.48f},{-.38f,-.3f},{.38f,-.3f},{0,.48f} }); p.Curve([](float t) { return t; }, [](float t) { return -.3f - (.16f - t * t) * .5f; }, 18, -.38f, .38f);
+            p.Ellipse(-.08f, -.1f, .06f, .06f); p.Ellipse(.12f, -.12f, .05f, .05f); p.Ellipse(.01f, .14f, .05f, .05f);
+            break;
+        case Donut:
+            p.Ellipse(0, 0, .42f, .4f); p.Ellipse(0, 0, .13f, .12f);
+            p.Line({ {-.25f,-.15f},{-.2f,-.08f} }); p.Line({ {.2f,-.22f},{.27f,-.17f} }); p.Line({ {.22f,.15f},{.17f,.22f} }); p.Line({ {-.2f,.2f},{-.26f,.15f} });
+            break;
+        case Cupcake:
+            p.Line({ {-.3f,.02f},{-.2f,.45f},{.2f,.45f},{.3f,.02f} });
+            p.Curve([](float t) { return std::cos(t) * .36f; }, [](float t) { return .02f - std::abs(std::sin(t)) * .32f + std::sin(t * 7) * .03f; }, 40, 0, kPi);
+            p.Ellipse(0, -.38f, .07f, .07f);
+            break;
+        case Dice:
+            p.Line({ {-.34f,-.34f},{.34f,-.34f},{.34f,.34f},{-.34f,.34f},{-.34f,-.34f} });
+            p.Ellipse(-.17f, -.17f, .05f, .05f); p.Ellipse(.17f, -.17f, .05f, .05f); p.Ellipse(0, 0, .05f, .05f); p.Ellipse(-.17f, .17f, .05f, .05f); p.Ellipse(.17f, .17f, .05f, .05f);
+            break;
+        case Gamepad:
+            p.Curve([](float t) { return std::cos(t) * .5f; }, [](float t) { return std::sin(t) * .26f; }, 36, 0, 2 * kPi);
+            p.Line({ {-.3f,0},{-.14f,0} }); p.Line({ {-.22f,-.08f},{-.22f,.08f} }); p.Ellipse(.17f, -.05f, .045f, .045f); p.Ellipse(.29f, .05f, .045f, .045f);
+            break;
+        case Book:
+            p.Line({ {0,-.28f},{-.46f,-.36f},{-.46f,.28f},{0,.38f},{.46f,.28f},{.46f,-.36f},{0,-.28f},{0,.38f} });
+            p.Line({ {-.36f,-.18f},{-.1f,-.13f} }); p.Line({ {-.36f,-.02f},{-.1f,.03f} }); p.Line({ {.36f,-.18f},{.1f,-.13f} });
+            break;
+        case Pencil:
+            p.Line({ {-.42f,.42f},{-.38f,.2f},{.26f,-.44f},{.44f,-.26f},{-.2f,.38f},{-.42f,.42f} }); p.Line({ {-.38f,.2f},{-.2f,.38f} }); p.Line({ {.18f,-.36f},{.36f,-.18f} });
+            break;
+        case Fish:
+            p.Curve([](float t) { return std::cos(t) * .36f; }, [](float t) { return std::sin(t) * .22f; }, 36, 0, 2 * kPi);
+            p.Line({ {-.34f,0},{-.56f,-.2f},{-.56f,.2f},{-.34f,0} }); p.Ellipse(.2f, -.05f, .03f, .03f);
+            break;
+        case Paw:
+            p.Ellipse(0, .15f, .22f, .18f);
+            for (float x : { -.3f, -.11f, .11f, .3f }) p.Ellipse(x, std::abs(x) > .2f ? -.08f : -.22f, .08f, .11f);
+            break;
+        case Ghost:
+            p.Curve([](float t) { return std::cos(t) * .3f; }, [](float t) { return -.1f + std::sin(t) * .34f; }, 24, kPi, 2 * kPi);
+            p.Line({ {.3f,-.1f},{.3f,.4f},{.15f,.28f},{0,.4f},{-.15f,.28f},{-.3f,.4f},{-.3f,-.1f} });
+            p.Ellipse(-.11f, -.12f, .04f, .06f); p.Ellipse(.11f, -.12f, .04f, .06f);
+            break;
+        case Crown: p.Line({ {-.42f,.28f},{-.46f,-.26f},{-.2f,.02f},{0,-.36f},{.2f,.02f},{.46f,-.26f},{.42f,.28f},{-.42f,.28f} }); break;
+        case Bolt: p.Line({ {.12f,-.5f},{-.26f,.06f},{0,.06f},{-.12f,.5f},{.28f,-.1f},{.02f,-.1f},{.12f,-.5f} }); break;
+        case Smile:
+            p.Ellipse(0, 0, .4f, .4f); p.Ellipse(-.14f, -.1f, .04f, .06f); p.Ellipse(.14f, -.1f, .04f, .06f);
+            p.Curve([](float t) { return std::cos(t) * .22f; }, [](float t) { return .02f + std::sin(t) * .2f; }, 16, .3f, kPi - .3f);
+            break;
+        case Tree:
+            p.Line({ {0,-.5f},{-.28f,-.12f},{-.13f,-.12f},{-.36f,.22f},{.36f,.22f},{.13f,-.12f},{.28f,-.12f},{0,-.5f} }); p.Line({ {-.07f,.22f},{-.07f,.46f},{.07f,.46f},{.07f,.22f} });
+            break;
+        case House:
+            p.Line({ {-.44f,-.02f},{0,-.44f},{.44f,-.02f} }); p.Line({ {-.32f,-.1f},{-.32f,.42f},{.32f,.42f},{.32f,-.1f} }); p.Line({ {-.1f,.42f},{-.1f,.12f},{.1f,.12f},{.1f,.42f} });
+            break;
+        case Arrow:
+            p.Curve([](float t) { return t; }, [](float t) { return std::sin(t * 4) * .18f; }, 30, -.5f, .38f);
+            p.Line({ {.2f,-.14f},{.4f,.08f},{.14f,.2f} });
+            break;
         default: break;
         }
     }
@@ -185,14 +255,21 @@ namespace {
         case 4: return { { "♪", "♫", "♬", "до ре ми", "ля-ля-ля", "𝄞" }, { Staff, Squiggle, Heart } };
         case 5: return { { "❀", "♥", "дом", "уют", "чай ☕" }, { Flower, Heart, Sun, Cloud, Cat } };
         case 6: return { {}, {} };
+        case 8: return { { "ой, космос", "SOS", "★", "до Марса 3 дня" }, { Rocket, Planet, Moon, Star, Sparkle, Atom } };
+        case 9: return { { "ням", "вкусно", "ещё кусочек" }, { Pizza, Donut, Cupcake, Mug, Heart } };
+        case 10: return { { "GG", "win", "1 UP", "lvl 99", "ещё катку" }, { Gamepad, Dice, Crown, Bolt, Star, Ghost } };
+        case 11: return { { "дз", "пять!", "2 + 2 = ?", "не забыть", "звонок" }, { Book, Pencil, Triangle, Question, Hatch, Sparkle } };
+        case 12: return { { "мяу", "гав", "буль" }, { Cat, Fish, Paw, Heart, Cloud } };
+        case 13: return { { "весна", "ля-ля", "тепло" }, { Tree, House, Sun, Cloud, Flower, Squiggle } };
+        case 14: return { { ":)", ":D", "хи-хи", "ура", "o_O" }, { Smile, Ghost, Heart, Star, Arrow, Crown, Bolt } };
         case 7: return { { "E = mc²", "a² + b² = c²", "H₂O", "♪", "π", "уют", "F = ma" }, { Star, Heart, Spiral, Cube, Flower, Triangle, Atom, Benzene, Staff, Cat, Sun } };
-        default: return { { "ок", "хм…", "!!!", "?!", "zzz", "ой", "ха-ха" }, { Star, Heart, Spiral, Cube, Squiggle, Cloud, Question, Hatch, Crosses, Mug, Note, Sparkle, Tangle, Spiral, Question } };
+        default: return { { "ок", "хм…", "!!!", "?!", "zzz", "ой", "ха-ха" }, { Star, Heart, Spiral, Cube, Squiggle, Cloud, Question, Hatch, Crosses, Mug, Note, Sparkle, Tangle, Spiral, Question, Arrow, Bolt, Smile, Crown } };
         }
     }
 }
 
 const char* CozyArt::PatternName(int index) {
-    static const char* kNames[kPatterns] = { "Каракули", "Математика", "Физика", "Химия", "Музыка", "Цветы и котики", "Чистая тетрадь", "Всё вместе" };
+    static const char* kNames[kPatterns] = { "Каракули", "Математика", "Физика", "Химия", "Музыка", "Цветы и котики", "Чистая тетрадь", "Всё вместе", "Космос", "Вкусняшки", "Игры", "Школа", "Зверята", "Природа", "Рожицы" };
     return kNames[std::clamp(index, 0, kPatterns - 1)];
 }
 
@@ -212,7 +289,9 @@ void CozyArt::Background(ImDrawList* dl, ImVec2 size, int pattern) {
     if (total == 0) return;
     static const ImU32 kPencils[4] = { IM_COL32(52, 82, 150, 105), IM_COL32(72, 62, 58, 95), IM_COL32(185, 65, 60, 95), IM_COL32(50, 125, 88, 100) };
     static const ImU32 kChalk[4] = { IM_COL32(150, 195, 240, 95), IM_COL32(240, 232, 218, 85), IM_COL32(245, 150, 140, 90), IM_COL32(150, 220, 175, 90) };
-    const ImU32* colors = paper ? kPencils : kChalk;
+    const ImU32 own = Theme::DoodleColor() >= 0 ? Theme::FromRgb(Theme::DoodleColor()).WithAlpha(0.5f) : 0;
+    const ImU32 ownSet[4] = { own, own, own, own };
+    const ImU32* colors = own ? ownSet : paper ? kPencils : kChalk;
     const float stepX = Px(205), stepY = Px(165);
     const int cols = static_cast<int>(size.x / stepX) + 1, rows = static_cast<int>(size.y / stepY) + 1;
     for (int y = 0; y < rows; ++y)
@@ -225,37 +304,193 @@ void CozyArt::Background(ImDrawList* dl, ImVec2 size, int pattern) {
         }
 }
 
-void CozyArt::Orb(ImDrawList* dl, ImVec2 c, float r, float time) {
-    const float breathe = 1.0f + std::sin(time * 1.6f) * 0.018f;
-    const float R = r * breathe;
-    const Theme::Color tone = Theme::Palette(0).Mix({ 255, 214, 160 }, 0.82f);
-    dl->AddCircleFilled(ImVec2(c.x + Px(5), c.y + Px(8)), R, IM_COL32(90, 65, 45, 42), 96); // тень на бумаге
-    dl->AddCircleFilled(c, R, tone.WithAlpha(1), 96);
-    const ImU32 ink = IM_COL32(58, 46, 38, 215);
-    for (int pass = 0; pass < 2; ++pass) { // обводка в два штриха, как карандашом
-        ImVec2 points[97];
-        for (int i = 0; i <= 96; ++i) {
-            const float t = i * 2 * kPi / 96;
-            const float wobble = 1.0f + (std::sin(t * 5 + pass * 2.0f) + std::sin(t * 11 + pass)) * 0.006f + pass * 0.012f;
-            points[i] = ImVec2(c.x + std::cos(t) * R * wobble, c.y + std::sin(t) * R * wobble);
+namespace {
+    int g_mascot = -1;
+    bool g_pickRequested = false, g_customTried = false;
+
+    void EnsureMascot() {
+        if (g_mascot >= 0) return;
+        g_mascot = std::clamp(std::atoi(Config::Value("cozy", "mascot", "0").c_str()), 0, CozyArt::kMascots - 1);
+    }
+
+    struct Draw2 {
+        ImDrawList* dl; ImVec2 c; float r; ImU32 ink, fill;
+        ImVec2 P(float x, float y) const { return ImVec2(c.x + x * r, c.y + y * r); }
+        void Circle(float x, float y, float R, ImU32 color) const { dl->AddCircleFilled(P(x, y), R * r, color, 48); }
+        void Ring(float x, float y, float R, float w = 2.4f) const { dl->AddCircle(P(x, y), R * r, ink, 64, Px(w)); }
+        void Oval(float x, float y, float rx, float ry, ImU32 color) const { dl->AddEllipseFilled(P(x, y), ImVec2(rx * r, ry * r), color, 0.0f, 32); }
+        void Poly(std::initializer_list<ImVec2> pts, ImU32 color, bool closed, float w = 2.4f) const {
+            std::vector<ImVec2> out;
+            for (const auto& p : pts) out.push_back(P(p.x, p.y));
+            if (color) dl->AddConvexPolyFilled(out.data(), static_cast<int>(out.size()), color);
+            dl->AddPolyline(out.data(), static_cast<int>(out.size()), ink, closed ? ImDrawFlags_Closed : 0, Px(w));
         }
-        dl->AddPolyline(points, 97, ink, 0, Px(pass ? 1.2f : 2.2f));
+        void Arc(float x, float y, float R, float from, float to, float w = 2.4f) const {
+            dl->PathArcTo(P(x, y), R * r, from, to, 28);
+            dl->PathStroke(ink, 0, Px(w));
+        }
+        void Eyes(float x, float y, float blink, float size = 0.085f) const {
+            for (float side : { -1.0f, 1.0f }) {
+                Oval(side * x, y, size, size * 1.35f * blink, ink);
+                if (blink > 0.5f) Circle(side * x + size * 0.3f, y - size * 0.45f, size * 0.32f, IM_COL32(255, 255, 255, 235));
+            }
+        }
+        void Cheeks(float x, float y) const { for (float side : { -1.0f, 1.0f }) Oval(side * x, y, 0.1f, 0.065f, IM_COL32(240, 120, 130, 120)); }
+    };
+
+    void DrawCat(const Draw2& d, float time, float blink) {
+        const float tail = std::sin(time * 2.2f) * 0.18f; // хвост машет
+        std::vector<ImVec2> line;
+        for (int i = 0; i <= 24; ++i) { const float k = i / 24.0f; line.push_back(d.P(0.6f + k * 0.42f + tail * k, 0.62f - k * 0.95f + std::sin(k * 5.0f + time * 2.2f) * 0.05f)); }
+        d.dl->AddPolyline(line.data(), 25, d.ink, 0, Px(9.0f));
+        d.dl->AddPolyline(line.data(), 25, d.fill, 0, Px(5.0f));
+        const float twitch = std::fmod(time, 5.1f) < 0.18f ? 0.05f : 0.0f; // ухо дёргается
+        d.Poly({ {-0.74f,-0.28f},{-0.68f - twitch,-0.92f},{-0.2f,-0.66f} }, d.fill, true);
+        d.Poly({ {0.74f,-0.28f},{0.68f,-0.92f},{0.2f,-0.66f} }, d.fill, true);
+        d.Poly({ {-0.62f,-0.42f},{-0.6f,-0.74f},{-0.36f,-0.6f} }, IM_COL32(240, 140, 150, 170), true, 1.0f);
+        d.Poly({ {0.62f,-0.42f},{0.6f,-0.74f},{0.36f,-0.6f} }, IM_COL32(240, 140, 150, 170), true, 1.0f);
+        d.Circle(0, 0, 0.8f, d.fill);
+        d.Ring(0, 0, 0.8f, 3.0f);
+        d.Eyes(0.3f, -0.1f, blink, 0.1f);
+        d.Poly({ {-0.05f,0.08f},{0.05f,0.08f},{0,0.15f} }, IM_COL32(230, 110, 130, 255), true, 1.2f);
+        d.Arc(-0.1f, 0.17f, 0.1f, 0.0f, kPi, 2.6f);
+        d.Arc(0.1f, 0.17f, 0.1f, 0.0f, kPi, 2.6f);
+        for (float side : { -1.0f, 1.0f }) for (float dy : { -0.06f, 0.08f })
+            d.Poly({ {side * 0.42f, 0.12f + dy * 0.3f},{side * 0.98f, 0.06f + dy * 1.6f} }, 0, false, 1.8f);
+        d.Cheeks(0.48f, 0.22f);
     }
-    // штриховка тени справа внизу
-    for (int i = 0; i < 9; ++i) {
-        const float k = i / 8.0f, x = c.x + R * (0.2f + k * 0.5f), half = std::sqrt(std::max(0.0f, R * R - (x - c.x) * (x - c.x))) * 0.72f;
-        dl->AddLine(ImVec2(x, c.y + half), ImVec2(x + R * 0.1f, c.y + half * 0.15f), IM_COL32(58, 46, 38, 55), Px(1.4f));
+
+    void DrawGhost(const Draw2& d, float time, float blink) {
+        std::vector<ImVec2> body;
+        for (int i = 0; i <= 28; ++i) { const float t = kPi + kPi * i / 28.0f; body.push_back(d.P(std::cos(t) * 0.68f, -0.1f + std::sin(t) * 0.78f)); }
+        for (int i = 0; i <= 44; ++i) { const float k = i / 44.0f, x = 0.68f - k * 1.36f; body.push_back(d.P(x, 0.72f + std::sin(k * 18.85f + time * 3.0f) * 0.08f)); }
+        d.dl->AddConcavePolyFilled(body.data(), static_cast<int>(body.size()), d.fill);
+        d.dl->AddPolyline(body.data(), static_cast<int>(body.size()), d.ink, ImDrawFlags_Closed, Px(3.0f));
+        d.Eyes(0.25f, -0.2f, blink, 0.11f);
+        d.Oval(0, 0.12f, 0.09f, 0.12f + std::sin(time * 2.0f) * 0.03f, d.ink);
+        d.Cheeks(0.43f, 0.04f);
     }
-    // мордочка; глаза иногда моргают
+
+    void Robot(const Draw2& d, float time, float blink) {
+        d.Poly({ {0,-0.72f},{0,-0.98f} }, 0, false, 3.0f);
+        d.Circle(0, -1.02f, 0.09f, std::fmod(time, 1.4f) < 0.7f ? IM_COL32(255, 90, 90, 255) : IM_COL32(120, 40, 40, 255));
+        d.Ring(0, -1.02f, 0.09f);
+        for (float side : { -1.0f, 1.0f }) d.dl->AddRectFilled(d.P(side > 0 ? 0.8f : -0.94f, -0.26f), d.P(side > 0 ? 0.94f : -0.8f, 0.26f), d.ink, 0.05f * d.r);
+        d.dl->AddRectFilled(d.P(-0.82f, -0.72f), d.P(0.82f, 0.72f), d.fill, 0.24f * d.r);
+        d.dl->AddRect(d.P(-0.82f, -0.72f), d.P(0.82f, 0.72f), d.ink, 0.24f * d.r, 0, Px(3.0f));
+        for (float side : { -1.0f, 1.0f }) {
+            d.Circle(side * 0.34f, -0.2f, 0.19f, IM_COL32(255, 255, 255, 240));
+            d.Ring(side * 0.34f, -0.2f, 0.19f);
+            d.Oval(side * 0.34f + std::sin(time * 0.8f) * 0.06f, -0.2f, 0.08f, 0.1f * blink, d.ink);
+        }
+        d.dl->AddRectFilled(d.P(-0.46f, 0.24f), d.P(0.46f, 0.52f), d.ink, 0.08f * d.r);
+        for (int i = 0; i < 7; ++i) { // рот — голосовая волна
+            const float x = -0.36f + i * 0.12f, h = 0.03f + 0.08f * std::fabs(std::sin(time * 5.0f + i));
+            d.dl->AddRectFilled(d.P(x - 0.03f, 0.38f - h), d.P(x + 0.03f, 0.38f + h), d.fill, 0.02f * d.r);
+        }
+    }
+
+    void Cocoa(const Draw2& d, float time, float blink) {
+        for (int s = -1; s <= 1; ++s) { // пар
+            std::vector<ImVec2> steam;
+            for (int i = 0; i <= 18; ++i) { const float k = i / 18.0f; steam.push_back(d.P(s * 0.3f + std::sin(k * 7.0f + time * 2.0f + s) * 0.07f, -0.56f - k * 0.46f)); }
+            d.dl->AddPolyline(steam.data(), 19, d.ink, 0, Px(2.2f));
+        }
+        d.dl->AddCircle(d.P(0.76f, 0.1f), 0.28f * d.r, d.ink, 40, Px(9.0f));
+        d.dl->AddCircle(d.P(0.76f, 0.1f), 0.28f * d.r, d.fill, 40, Px(5.0f));
+        d.dl->AddRectFilled(d.P(-0.72f, -0.5f), d.P(0.72f, 0.8f), d.fill, 0.2f * d.r);
+        d.dl->AddRect(d.P(-0.72f, -0.5f), d.P(0.72f, 0.8f), d.ink, 0.2f * d.r, 0, Px(3.0f));
+        d.Oval(0, -0.5f, 0.72f, 0.13f, IM_COL32(110, 70, 50, 255));
+        d.Eyes(0.26f, 0.08f, blink, 0.095f);
+        d.Arc(0, 0.26f, 0.14f, 0.2f, kPi - 0.2f, 2.8f);
+        d.Cheeks(0.46f, 0.32f);
+    }
+
+    void PlanetBuddy(const Draw2& d, float time, float blink) {
+        const float co = std::cos(-0.32f), si = std::sin(-0.32f);
+        auto ring = [&](float from, float to) {
+            std::vector<ImVec2> pts;
+            for (int i = 0; i <= 36; ++i) { const float t = from + (to - from) * i / 36.0f, x = std::cos(t) * 1.14f, y = std::sin(t) * 0.3f; pts.push_back(d.P(x * co - y * si, x * si + y * co)); }
+            d.dl->AddPolyline(pts.data(), 37, d.ink, 0, Px(3.2f));
+        };
+        ring(kPi, 2 * kPi);
+        d.Circle(0, 0, 0.72f, d.fill);
+        d.Ring(0, 0, 0.72f, 3.0f);
+        ring(0, kPi);
+        d.Eyes(0.27f, -0.12f, blink, 0.095f);
+        d.Arc(0, 0.06f, 0.16f, 0.2f, kPi - 0.2f, 2.8f);
+        d.Cheeks(0.44f, 0.1f);
+        const float a = time * 0.9f, x = std::cos(a) * 1.14f, y = std::sin(a) * 0.3f; // спутник
+        d.Circle(x * co - y * si, x * si + y * co, 0.07f, d.ink);
+    }
+
+    void DrawSmile(const Draw2& d, float blink) {
+        d.Circle(0, 0, 0.84f, d.fill);
+        d.Ring(0, 0, 0.84f, 3.0f);
+        d.Eyes(0.3f, -0.14f, blink, 0.1f);
+        d.Arc(0, 0.02f, 0.36f, 0.3f, kPi - 0.3f, 3.0f);
+        d.Cheeks(0.52f, 0.2f);
+    }
+}
+
+const char* CozyArt::MascotName(int index) {
+    static const char* kNames[kMascots] = { "Котик", "Призрак", "Робот", "Кружка какао", "Планетка", "Смайлик", "Логотип ASTRIX", "Своя картинка" };
+    return kNames[std::clamp(index, 0, kMascots - 1)];
+}
+
+int CozyArt::Mascot() { EnsureMascot(); return g_mascot; }
+
+void CozyArt::SetMascot(int index) {
+    g_mascot = std::clamp(index, 0, kMascots - 1);
+    Config::SetValue("cozy", "mascot", std::to_string(g_mascot));
+}
+
+void CozyArt::PickCustom() {
+    g_pickRequested = true;
+    Wallpaper::PickAsync();
+}
+
+bool CozyArt::TakePicked(const std::string& path) {
+    if (!g_pickRequested) return false;
+    g_pickRequested = false;
+    if (Logo::LoadCustom(path)) {
+        Config::SetValue("cozy", "mascot_file", path);
+        SetMascot(kMascotCustom);
+    }
+    return true;
+}
+
+void CozyArt::Orb(ImDrawList* dl, ImVec2 c, float r, float time) {
+    EnsureMascot();
+    if (g_mascot == kMascotCustom && !g_customTried) {
+        g_customTried = true;
+        const std::string file = Config::Value("cozy", "mascot_file", "");
+        if (!file.empty()) Logo::LoadCustom(file);
+    }
+    const bool paper = Theme::Paper();
+    const float breathe = 1.0f + std::sin(time * 1.5f) * 0.018f;
+    const ImVec2 at(c.x, c.y + std::sin(time * 1.1f) * r * 0.03f); // персонаж чуть покачивается
+    const float R = r * 0.98f * breathe;
     const float blink = std::fmod(time, 4.3f) < 0.14f ? 0.12f : 1.0f;
-    for (float side : { -1.0f, 1.0f })
-        dl->AddEllipseFilled(ImVec2(c.x + side * R * 0.3f, c.y - R * 0.12f), ImVec2(R * 0.07f, R * 0.11f * blink), ink, 0.0f, 20);
-    ImVec2 smile[21];
-    for (int i = 0; i <= 20; ++i) {
-        const float t = kPi * (0.18f + 0.64f * i / 20.0f);
-        smile[i] = ImVec2(c.x + std::cos(t) * R * 0.34f, c.y + R * 0.05f + std::sin(t) * R * 0.3f);
+
+    if (g_mascot == kMascotLogo || (g_mascot == kMascotCustom && !Logo::HasCustom())) {
+        const Theme::Color tone = Theme::Palette(0).Mix(paper ? Theme::Color{ 40, 25, 45 } : Theme::Color{ 255, 255, 255 }, paper ? 0.2f : 0.28f);
+        Logo::DrawTinted(dl, at, r * 2.75f * breathe, tone.WithAlpha(1.0f));
+        return;
     }
-    dl->AddPolyline(smile, 21, ink, 0, Px(2.4f));
-    for (float side : { -1.0f, 1.0f })
-        dl->AddCircleFilled(ImVec2(c.x + side * R * 0.5f, c.y + R * 0.16f), R * 0.09f, IM_COL32(235, 120, 120, 90), 24);
+    if (g_mascot == kMascotCustom) {
+        Logo::DrawCustom(dl, at, r * 2.1f * breathe);
+        dl->AddCircle(at, r * 1.05f * breathe, Theme::Palette(0).WithAlpha(0.9f), 96, Px(3.0f));
+        return;
+    }
+    const Draw2 d{ dl, at, R, IM_COL32(52, 40, 36, 240), Theme::Palette(0).Mix({ 255, 236, 214 }, 0.62f).WithAlpha(1.0f) };
+    dl->AddEllipseFilled(ImVec2(at.x, c.y + R * 1.02f), ImVec2(R * 0.72f, R * 0.09f), IM_COL32(0, 0, 0, paper ? 45 : 110), 0.0f, 40); // тень
+    switch (g_mascot) {
+    case 1: DrawGhost(d, time, blink); break;
+    case 2: Robot(d, time, blink); break;
+    case 3: Cocoa(d, time, blink); break;
+    case 4: PlanetBuddy(d, time, blink); break;
+    case 5: DrawSmile(d, blink); break;
+    default: DrawCat(d, time, blink); break;
+    }
 }

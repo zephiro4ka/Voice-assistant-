@@ -2,6 +2,8 @@
 #include <iterator>
 #include "TextUtils.h"
 
+#include <cstring>
+
 #include "Platform.h"
 
 #include <algorithm>
@@ -124,7 +126,7 @@ bool Text::FindWakeWord(const std::string& text, std::string& command, const std
 
     if (!anya) return false;
     // Whisper иногда слышит «Аня» как «Они», «Ани», «Анна» — но только в самом начале фразы это обращение
-    static const wchar_t* kMisheard[] = { L"они", L"оня", L"ани", L"анна", L"аня", L"ая", L"оне" };
+    static const wchar_t* kMisheard[] = { L"оня", L"ани" }; // обычные слова («они», «ая») сюда нельзя — иначе откликается на чужие разговоры
     size_t start = 0;
     while (start < lower.size() && !IsCharAlphaW(lower[start])) ++start;
     size_t end = start;
@@ -262,6 +264,99 @@ std::string Text::ReplaceWord(const std::string& text, const std::string& from, 
     return ToUtf8(wide);
 }
 
+namespace {
+    enum class Case { MascNom, NeutNom, Gen, Prep };
+
+    std::string Ending(const std::string& stem, Case c) {
+        if (stem == "трет") return c == Case::MascNom ? "третий" : c == Case::NeutNom ? "третье" : c == Case::Gen ? "третьего" : "третьем";
+        const bool stressed = stem == "втор" || stem == "шест" || stem == "седьм" || stem == "восьм" || stem == "сороков";
+        return stem + (c == Case::MascNom ? (stressed ? "ой" : "ый") : c == Case::NeutNom ? "ое" : c == Case::Gen ? "ого" : "ом");
+    }
+
+    // 31 → «тридцать первое», 1888 → «тысяча восемьсот восемьдесят восьмом»
+    std::string SayOrdinal(unsigned n, Case c) {
+        static const char* kUnits[20] = { "", "перв", "втор", "трет", "четверт", "пят", "шест", "седьм", "восьм", "девят", "десят", "одиннадцат", "двенадцат", "тринадцат",
+                                          "четырнадцат", "пятнадцат", "шестнадцат", "семнадцат", "восемнадцат", "девятнадцат" };
+        static const char* kTensOrd[10] = { "", "", "двадцат", "тридцат", "сороков", "пятидесят", "шестидесят", "семидесят", "восьмидесят", "девяност" };
+        static const char* kHundredsOrd[10] = { "", "сот", "двухсот", "трёхсот", "четырёхсот", "пятисот", "шестисот", "семисот", "восьмисот", "девятисот" };
+        static const char* kThousandsOrd[10] = { "", "тысячн", "двухтысячн", "трёхтысячн", "четырёхтысячн", "пятитысячн", "шеститысячн", "семитысячн", "восьмитысячн", "девятитысячн" };
+        const unsigned rest = n % 100;
+        if (rest == 0 && n % 1000 == 0) return Ending(kThousandsOrd[n / 1000], c);
+        std::string prefix;
+        if (rest == 0) {
+            if (n >= 1000) prefix = SayNumber(n - n % 1000) + " ";
+            return prefix + Ending(kHundredsOrd[n % 1000 / 100], c);
+        }
+        const unsigned head = n - (rest < 20 ? rest : rest % 10);
+        if (head) prefix = SayNumber(head) + " ";
+        if (prefix.rfind("одна тысяча", 0) == 0) prefix.erase(0, 9); // «тысяча восемьсот…»
+        if (rest < 20) return prefix + Ending(kUnits[rest], c);
+        if (rest % 10 == 0) return prefix + Ending(kTensOrd[rest / 10], c);
+        return prefix + Ending(kUnits[rest % 10], c);
+    }
+
+    bool IsMonth(const std::wstring& word) {
+        for (const wchar_t* m : { L"января", L"февраля", L"марта", L"апреля", L"мая", L"июня", L"июля", L"августа", L"сентября", L"октября", L"ноября", L"декабря" })
+            if (word == m) return true;
+        return false;
+    }
+
+    // Соседнее слово в нижнем регистре, без знаков препинания
+    std::wstring WordAfter(const std::string& text, size_t at) {
+        while (at < text.size() && text[at] == ' ') ++at;
+        size_t end = at;
+        while (end < text.size() && text[end] != ' ' && !std::strchr(".,!?;:()\"«»", text[end])) ++end;
+        return Text::LowerRu(Text::ToWide(text.substr(at, end - at)));
+    }
+
+    std::wstring WordBefore(const std::string& text, size_t at) {
+        while (at > 0 && text[at - 1] == ' ') --at;
+        size_t start = at;
+        while (start > 0 && text[start - 1] != ' ' && text[start - 1] != ',' && text[start - 1] != '.') --start;
+        return Text::LowerRu(Text::ToWide(text.substr(start, at - start)));
+    }
+
+    // Число как порядковое по следующему слову; false — обычное число
+    bool OrdinalFor(unsigned long long n, const std::wstring& next, const std::wstring& before, Case& c) {
+        const bool genitive = before == L"до" || before == L"с" || before == L"со" || before == L"от" || before == L"после" || before == L"около" || before == L"из";
+        if (IsMonth(next) && n >= 1 && n <= 31) { c = genitive ? Case::Gen : Case::NeutNom; return true; }
+        if (n >= 1 && n <= 9999 && (next == L"год" || next == L"года" || next == L"году" || next == L"годом")) {
+            if (next == L"год" && before != L"в" && n < 1000) return false; // «1 год» — длительность
+            if (next == L"года" && n < 1000) return false;                 // «2 года»
+            c = next == L"год" ? Case::MascNom : next == L"года" ? Case::Gen : Case::Prep;
+            return true;
+        }
+        return false;
+    }
+
+    bool IsFeminine(const std::wstring& next) {
+        for (const wchar_t* w : { L"минута", L"минуты", L"секунда", L"секунды", L"неделя", L"недели", L"тысячи", L"копейка", L"копейки", L"задача", L"задачи", L"программа", L"программы", L"вкладка", L"вкладки" })
+            if (next == w) return true;
+        return false;
+    }
+
+    // «тридцать первый октября» прямо от нейросети → «тридцать первое октября»
+    std::string FixMonthOrdinals(const std::string& source) {
+        std::wstring text = Text::ToWide(source), lower = Text::LowerRu(text);
+        for (const wchar_t* month : { L"января", L"февраля", L"марта", L"апреля", L"мая", L"июня", L"июля", L"августа", L"сентября", L"октября", L"ноября", L"декабря" }) {
+            const std::wstring needle = std::wstring(L" ") + month;
+            for (size_t at = lower.find(needle); at != std::wstring::npos; at = lower.find(needle, at + needle.size())) {
+                size_t start = lower.rfind(L' ', at == 0 ? 0 : at - 1);
+                start = start == std::wstring::npos ? 0 : start + 1;
+                const std::wstring word = lower.substr(start, at - start);
+                std::wstring fixed;
+                if (word == L"третий") fixed = L"третье";
+                else if (word.size() > 3 && (word.compare(word.size() - 2, 2, L"ый") == 0 || word.compare(word.size() - 2, 2, L"ой") == 0)) fixed = word.substr(0, word.size() - 2) + L"ое";
+                else continue;
+                text.replace(start, word.size(), fixed);
+                lower.replace(start, word.size(), fixed);
+                at = start + fixed.size();
+            }
+        }
+        return Text::ToUtf8(text);
+    }
+}
+
 std::string Text::NumbersToWords(const std::string& text) {
     std::string out;
     for (size_t i = 0; i < text.size();) {
@@ -283,7 +378,19 @@ std::string Text::NumbersToWords(const std::string& text) {
         else {
             // «05» в минутах: «ноль пять»
             if (digits.size() == 2 && digits[0] == '0') out += "ноль " + SayNumber(digits[1] - '0');
-            else out += SayNumber(std::stoull(digits));
+            else {
+                const unsigned long long number = std::stoull(digits);
+                const std::wstring next = WordAfter(text, j), before = WordBefore(text, i);
+                Case wordCase = Case::NeutNom;
+                if (OrdinalFor(number, next, before, wordCase)) out += SayOrdinal(static_cast<unsigned>(number), wordCase);
+                else if (IsFeminine(next) && number % 100 != 11 && number % 100 != 12 && (number % 10 == 1 || number % 10 == 2)) {
+                    std::string spoken = SayNumber(number); // «одна минута», «две минуты»
+                    const size_t lastSpace = spoken.rfind(' ');
+                    spoken.resize(lastSpace == std::string::npos ? 0 : lastSpace + 1);
+                    out += spoken + (number % 10 == 1 ? "одна" : "две");
+                }
+                else out += SayNumber(number);
+            }
         }
         if (j < text.size() && text[j] == ':' && j + 1 < text.size() && std::isdigit(static_cast<unsigned char>(text[j + 1]))) {
             out += ' '; // 13:05 → «тринадцать ноль пять»
@@ -291,7 +398,7 @@ std::string Text::NumbersToWords(const std::string& text) {
         }
         i = j;
     }
-    return out;
+    return FixMonthOrdinals(out);
 }
 
 std::string Text::LatinToCyrillic(const std::string& text) {

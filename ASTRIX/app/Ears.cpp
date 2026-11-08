@@ -3,18 +3,22 @@
 #include "Platform.h"
 #include "BodySounds.h"
 #include "Brain.h"
+#include "LocalAi.h"
 #include "Log.h"
 #include "Settings.h"
 #include "SileroVoice.h"
 #include "State.h"
 #include "TextUtils.h"
+#include "Voice.h"
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "../miniaudio.h"
 #include "../whisper.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <fstream>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -41,6 +45,7 @@ namespace {
     constexpr Clock kArmTimeoutMs = 8000;               // «говори» без речи — сдаёмся
 
     std::thread g_thread;
+    std::atomic<float> g_confidence{ 1.0f }; // насколько модель уверена в последней фразе
     std::mutex g_inputMutex;
     std::vector<float> g_input; // сэмплы из колбэка микрофона
 
@@ -51,9 +56,13 @@ namespace {
         if (g_input.size() < kSampleRate * 5) g_input.insert(g_input.end(), samples, samples + frames);
     }
 
-    std::wstring FindModelFile() {
-        static const wchar_t* kNames[] = { L"ggml-small.bin", L"ggml-small-q5_1.bin", L"ggml-base.bin", L"ggml-medium.bin", L"ggml-tiny.bin" };
-        static const wchar_t* kSubdirs[] = { L"", L"\\models", L"\\ASTRIX\\models" };
+    std::wstring FindModelFile(const wchar_t* only = nullptr) {
+        static const wchar_t* kAll[] = { L"ggml-small.bin", L"ggml-small-q5_1.bin", L"ggml-base.bin", L"ggml-tiny.bin", L"ggml-medium-q5_0.bin", L"ggml-medium.bin", L"ggml-large-v3-turbo-q5_0.bin" }; // сначала быстрые
+        const std::wstring chosen = Text::ToWide(Config::Value("ears", "model", "ggml-small.bin"));
+        std::vector<const wchar_t*> kNames;
+        if (only) kNames.push_back(only);
+        else { kNames.push_back(chosen.c_str()); kNames.insert(kNames.end(), std::begin(kAll), std::end(kAll)); }
+        static const wchar_t* kSubdirs[] = { L"", L"\\models", L"\\models\\speech", L"\\ASTRIX\\models" };
         std::wstring dir = Text::ExecutableDirectory();
         for (int level = 0; level < 4; ++level) {
             for (const wchar_t* sub : kSubdirs) {
@@ -70,12 +79,22 @@ namespace {
         return {};
     }
 
-    std::string Transcribe(whisper_context* ctx, std::vector<float>& pcm) {
+    // Текст на лету: отдельный поток распознаёт ещё не законченную фразу
+    std::mutex g_liveMutex;
+    std::vector<float> g_liveAudio;
+    std::string g_draftText;             // готовый черновик: если он покрывает всю фразу, ответ начинается сразу
+    size_t g_draftSamples = 0;
+    std::atomic<float> g_draftConfidence{ 1.0f };
+    std::atomic<bool> g_liveWanted{ false }, g_liveBusy{ false }, g_reload{ false };
+
+    std::string Transcribe(whisper_context* ctx, std::vector<float>& pcm, whisper_state* state = nullptr) {
         // тихий микрофон → нормальная громкость
         float peak = 0.0f;
-        for (float v : pcm) peak = std::max(peak, std::fabs(v));
-        if (peak > 1e-5f) {
-            const float gain = std::min(0.9f / peak, 30.0f);
+        double energy = 0.0;
+        for (float v : pcm) { peak = std::max(peak, std::fabs(v)); energy += static_cast<double>(v) * v; }
+        if (peak > 1e-5f && !pcm.empty()) { // по средней громкости, а не по одному щелчку: тихая речь становится обычной
+            const float rms = static_cast<float>(std::sqrt(energy / pcm.size()));
+            const float gain = std::min({ 0.1f / std::max(rms, 1e-6f), 0.95f / peak, 200.0f });
             for (float& v : pcm) v *= gain;
         }
         if (pcm.size() < kSampleRate) pcm.resize(kSampleRate, 0.0f); // whisper не любит совсем короткие куски
@@ -100,7 +119,8 @@ namespace {
             flush();
             return out;
         };
-        whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+        whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY); // на проверке точнее перебора и в полтора раза быстрее
+        if (state) p.abort_callback = [](void*) { return !g_liveWanted.load(); }; // фраза кончилась — бросаем черновик сразу
         p.language = "ru";
         p.n_threads = std::clamp(static_cast<int>(std::thread::hardware_concurrency()) / 2, 2, 8);
         p.print_progress = p.print_special = p.print_realtime = p.print_timestamps = false;
@@ -109,10 +129,10 @@ namespace {
         p.no_context = true;
         p.suppress_blank = true;
         p.suppress_nst = true;
-        p.temperature_inc = 0.0f;         // без повторных проходов
+        p.temperature_inc = state ? 0.0f : 0.2f; // итоговый текст: если вышло неуверенно — пробует ещё раз
         // Подсказка словарю whisper: как пишется имя, типичные команды и имена друзей из [contacts] —
         // меньше «Они откроетим» и «прыща вы» вместо «прыщавый»
-        std::string prompt = "Аня, открой Steam. Аня, запусти, пожалуйста, Discord. Аня, закрой Telegram. Аня, поставь на паузу. Аня, сколько будет 375 умножить на 124? Аня, сколько будет 2 плюс 2 умножить на 2? Аня, 100 разделить на 4 минус 7. Аня, какая сейчас погода? Аня, как у тебя дела?";
+        std::string prompt = "Аня, открой Steam. Аня, какая сейчас погода? Аня, почисти память. Аня, очисти оперативку. Аня, что произошло в этом городе в 1941 году? Разговорная русская речь: вопросы об истории, географии, науке, играх и программах.";
         std::string names;
         for (const auto& [spoken, handle] : Config::Contacts()) names += (names.empty() ? "" : ", ") + Text::Capitalize(spoken);
         if (!names.empty()) prompt += " Аня, зайди в чат с " + names + ".";
@@ -122,9 +142,31 @@ namespace {
         const float seconds = static_cast<float>(pcm.size()) / kSampleRate;
         p.audio_ctx = std::clamp(static_cast<int>(seconds * 50.0f) + 64, 256, 1500);
 
+        if (state) { // черновик на лету: быстро и только текст
+            if (whisper_full_with_state(ctx, state, p, pcm.data(), static_cast<int>(pcm.size())) != 0) return {};
+            std::string draft;
+            double sure = 0.0;
+            int count = 0;
+            for (int i = 0; i < whisper_full_n_segments_from_state(state); ++i) {
+                draft += whisper_full_get_segment_text_from_state(state, i);
+                for (int t = 0; t < whisper_full_n_tokens_from_state(state, i); ++t) {
+                    const auto data = whisper_full_get_token_data_from_state(state, i, t);
+                    if (data.id < whisper_token_eot(ctx)) { sure += data.p; ++count; }
+                }
+            }
+            g_draftConfidence = count ? static_cast<float>(sure / count) : 0.0f;
+            return DropRepeats(Text::Trim(draft));
+        }
         if (whisper_full(ctx, p, pcm.data(), static_cast<int>(pcm.size())) != 0) return {};
         std::string text;
-        for (int i = 0; i < whisper_full_n_segments(ctx); ++i) text += whisper_full_get_segment_text(ctx, i);
+        double sureSum = 0.0;
+        int sureCount = 0;
+        for (int i = 0; i < whisper_full_n_segments(ctx); ++i) {
+            text += whisper_full_get_segment_text(ctx, i);
+            for (int t = 0; t < whisper_full_n_tokens(ctx, i); ++t)
+                if (whisper_full_get_token_id(ctx, i, t) < whisper_token_eot(ctx)) { sureSum += whisper_full_get_token_p(ctx, i, t); ++sureCount; }
+        }
+        g_confidence = sureCount ? static_cast<float>(sureSum / sureCount) : 0.0f;
         return DropRepeats(Text::Trim(text));
     }
 
@@ -140,7 +182,7 @@ namespace {
                 preroll_.insert(preroll_.end(), frame, frame + kFrame);
                 if (preroll_.size() > kPreRoll) preroll_.erase(preroll_.begin(), preroll_.end() - kPreRoll);
 
-                loudFrames_ = rms > std::max(noise_ * 3.2f, 0.0006f) ? loudFrames_ + 1 : 0;
+                loudFrames_ = rms > std::max(noise_ * 2.2f, 0.00035f) ? loudFrames_ + 1 : 0; // ловит и тихую речь
                 if (loudFrames_ < 3) return Event::None;
                 inSpeech_ = true;
                 segment_ = std::move(preroll_);
@@ -150,7 +192,7 @@ namespace {
             }
 
             segment_.insert(segment_.end(), frame, frame + kFrame);
-            if (rms > std::max(noise_ * 2.0f, 0.0004f)) lastVoice_ = NowMs();
+            if (rms > std::max(noise_ * 1.5f, 0.00025f)) lastVoice_ = NowMs();
             if (NowMs() - lastVoice_ <= static_cast<Clock>(silenceMs) && segment_.size() < kMaxUtterance) return Event::None;
 
             inSpeech_ = false;
@@ -193,8 +235,42 @@ namespace {
         return Transcribe(ctx, pcm);
     }
 
+    void LiveLoop(whisper_context** ctx, whisper_state** state) {
+        Clock last = 0;
+        while (g_app.running) {
+            Sleep(40);
+            if (!g_liveWanted.load() || NowMs() - last < 500) continue;
+            g_liveBusy = true;
+            if (g_liveWanted.load() && *ctx && *state) {
+                std::vector<float> audio;
+                { std::lock_guard lock(g_liveMutex); audio = g_liveAudio; }
+                if (audio.size() > kSampleRate / 2) {
+                    last = NowMs();
+                    const size_t covered = audio.size();
+                    const std::string draft = Transcribe(*ctx, audio, *state);
+                    if (g_liveWanted.load()) {
+                        std::lock_guard lock(g_liveMutex);
+                        g_draftText = draft;
+                        g_draftSamples = covered;
+                    }
+                    if (g_liveWanted.load() && !draft.empty() && !Text::IsWhisperGarbage(draft)) {
+                        std::string command;
+                        const bool mine = g_app.pttArmed.load() || NowMs() < g_app.followUpUntil.load() || Text::FindWakeWord(draft, command, Config::Get().assistant);
+                        if (mine) { Caption::Set(draft, true); Ai::Prewarm(); } // чужой разговор на экран не выводим; нейросеть просыпается заранее
+                    }
+                }
+            }
+            g_liveBusy = false;
+        }
+    }
+
+    void StopLive() {
+        g_liveWanted = false;
+        while (g_liveBusy.load()) Sleep(2);
+    }
+
     void Run() {
-        const std::wstring modelPath = FindModelFile();
+        std::wstring modelPath = FindModelFile();
         if (modelPath.empty()) {
             Chat::Add(Role::System, "Не найдена модель whisper (ggml-small.bin). Положи её в папку models рядом с проектом.");
             Caption::Set("нет модели распознавания — можно писать текстом");
@@ -214,6 +290,9 @@ namespace {
             Transcribe(ctx, silence);
         }
 
+        whisper_state* liveState = whisper_init_state(ctx);
+        std::thread live(LiveLoop, &ctx, &liveState);
+
         ma_device_config config = ma_device_config_init(ma_device_type_capture);
         config.capture.format = ma_format_f32;
         config.capture.channels = 1;
@@ -224,7 +303,8 @@ namespace {
         if (ma_device_init(nullptr, &config, &device) != MA_SUCCESS || ma_device_start(&device) != MA_SUCCESS) {
             Chat::Add(Role::System, "Не удалось открыть микрофон. Проверь разрешения Windows и устройство ввода.");
             Caption::Set("микрофон недоступен — можно писать текстом");
-            whisper_free(ctx);
+            StopLive();
+            g_app.running ? live.detach() : live.join();
             return;
         }
 
@@ -233,6 +313,7 @@ namespace {
 
         VoiceDetector vad;
         std::vector<float> pending;
+        Clock liveShared = 0;
 
         while (g_app.running) {
             Sleep(15);
@@ -243,14 +324,35 @@ namespace {
             }
 
             if (ctx && SileroVoice::AsrReady()) { // распознаёт GigaAM — whisper больше не нужен, освобождаем ~500 МБ
+                StopLive();
+                g_liveBusy = true;
+                if (liveState) { whisper_free_state(liveState); liveState = nullptr; }
                 whisper_free(ctx);
                 ctx = nullptr;
+                g_liveBusy = false;
                 Log::Write("распознавание: whisper выгружен, слушает GigaAM-v3");
+            }
+            if (g_reload.exchange(false)) { // выбрали другую модель распознавания
+                StopLive();
+                vad.Reset();
+                g_liveBusy = true;
+                const std::wstring next = FindModelFile();
+                whisper_context_params reloadParams = whisper_context_default_params();
+                reloadParams.use_gpu = false;
+                if (whisper_context* fresh = next.empty() ? nullptr : whisper_init_from_file_with_params(Text::ToUtf8(next).c_str(), reloadParams)) {
+                    if (liveState) whisper_free_state(liveState);
+                    if (ctx) whisper_free(ctx);
+                    ctx = fresh;
+                    liveState = whisper_init_state(ctx);
+                    modelPath = next;
+                    Log::Write("распознавание: новая модель");
+                }
+                g_liveBusy = false;
             }
             const Settings cfg = Config::Get();
             // пока Аня говорит — слушаем только «стоп» (свою речь из колонок она отбрасывает); пока думает — не слушаем вовсе
             const bool bargeIn = g_app.micEnabled && g_app.speaking && !g_app.thinking;
-            const bool deaf = !g_app.micEnabled || g_app.thinking || (g_app.speaking && !bargeIn) || (!bargeIn && !cfg.wakeWord && !g_app.pttArmed);
+            const bool deaf = g_app.setupOpen || !g_app.micEnabled || g_app.thinking || (g_app.speaking && !bargeIn) || (!bargeIn && !cfg.wakeWord && !g_app.pttArmed);
             if (g_app.pttArmed && !vad.InSpeech() && NowMs() - g_app.pttArmedAt > kArmTimeoutMs) {
                 g_app.pttArmed = false;
                 Caption::Set("ничего не услышала… нажми ещё раз");
@@ -266,7 +368,7 @@ namespace {
                 if (deaf) {
                     g_app.micLevel = g_app.micLevel * 0.85f;
                     g_app.PushLevel(0.0f);
-                    if (vad.InSpeech()) g_app.capturing = false;
+                    if (vad.InSpeech()) { g_app.capturing = false; g_liveWanted = false; }
                     vad.Reset();
                     continue;
                 }
@@ -289,19 +391,54 @@ namespace {
                     }
                     continue;
                 }
+                if (vad.InSpeech() && !bargeIn && ctx && NowMs() - liveShared > 250) { // свежий звук — черновику
+                    liveShared = NowMs();
+                    std::lock_guard lock(g_liveMutex);
+                    g_liveAudio = vad.Segment();
+                    g_liveWanted = true;
+                }
+                if (event == VoiceDetector::Event::Started) { std::lock_guard lock(g_liveMutex); g_draftText.clear(); g_draftSamples = 0; }
                 if (event == VoiceDetector::Event::Started) {
                     g_app.capturing = true;
                     if (g_app.pttArmed) Caption::Set("слушаю…", true);
                 } else if (event == VoiceDetector::Event::Finished) {
+                    StopLive(); // черновик больше не нужен, ядра отдаём итоговому распознаванию
                     g_app.capturing = false;
                     if (vad.VoicedMs() >= kMinBurstMs) {
                         // параметры звука считаем до распознавания: Transcribe меняет громкость сигнала
                         const BodySounds::Burst burst = BodySounds::Analyze(vad.Segment(), vad.Noise());
                         const bool shortSound = vad.VoicedMs() < kMinSpeechMs;
+                        if (!shortSound) { // насколько громко человек говорит по сравнению с обычным для него уровнем
+                            static float s_usual = 0.0f;
+                            double energy = 0.0;
+                            int crossings = 0;
+                            const auto& sound = vad.Segment();
+                            for (size_t s = 0; s < sound.size(); ++s) {
+                                energy += static_cast<double>(sound[s]) * sound[s];
+                                if (s && (sound[s] > 0) != (sound[s - 1] > 0)) ++crossings;
+                            }
+                            const float level = static_cast<float>(std::sqrt(energy / std::max<size_t>(sound.size(), 1)));
+                            const float zcr = static_cast<float>(crossings) / std::max<size_t>(sound.size(), 1);
+                            if (s_usual <= 0.0f) s_usual = level;
+                            const float ratio = level / std::max(s_usual, 1e-6f);
+                            // издалека голос очень слабый, но звонкий; шёпот — шипящий и не такой слабый
+                            const int mode = ratio < 0.14f && zcr < 0.2f ? 2 : ratio < 0.55f ? 1 : 0;
+                            Voice::SetReplyLoudness(mode);
+                            if (ratio > 0.4f) s_usual = s_usual * 0.85f + level * 0.15f;
+                            Log::Write("громкость голоса: " + std::to_string(ratio) + ", режим ответа " + std::to_string(mode));
+                        }
 
                         g_app.utteranceEndAt = NowMs();
                         g_app.transcribing = true;
-                        const std::string text = Recognize(ctx, modelPath, vad.Segment());
+                        std::string text;
+                        {
+                            std::lock_guard lock(g_liveMutex);
+                            if (!g_draftText.empty() && g_draftSamples + kSampleRate * 3 / 10 >= vad.Segment().size()) { // черновик уже знает всю фразу
+                                text = g_draftText;
+                                g_confidence = g_draftConfidence.load();
+                            }
+                        }
+                        if (text.empty()) text = Recognize(ctx, modelPath, vad.Segment());
                         g_app.transcribing = false;
 
                         const BodySounds::Kind body = BodySounds::Classify(text, burst);
@@ -329,11 +466,51 @@ namespace {
 
         g_app.audioReady = false;
         ma_device_uninit(&device);
+        StopLive();
+        live.join();
+        if (liveState) whisper_free_state(liveState);
         if (ctx) whisper_free(ctx);
     }
 }
 
 void Ears::Start() { g_thread = std::thread(Run); }
+
+void Ears::ReloadModel() { g_reload = true; }
+bool Ears::ModelPresent(const std::string& fileName) { return !FindModelFile(Text::ToWide(fileName).c_str()).empty(); }
+
+float Ears::LastConfidence() { return g_confidence.load(); }
+
+void Ears::Bench(const std::string& rawFile) {
+    std::thread([rawFile] {
+        std::ifstream in(rawFile, std::ios::binary | std::ios::ate);
+        std::vector<float> sound(static_cast<size_t>(in.tellg()) / sizeof(float));
+        in.seekg(0);
+        in.read(reinterpret_cast<char*>(sound.data()), sound.size() * sizeof(float));
+        for (const wchar_t* name : { L"ggml-small.bin", L"ggml-medium-q5_0.bin", L"ggml-large-v3-turbo-q5_0.bin" }) {
+            const std::wstring path = FindModelFile(name);
+            if (path.empty()) continue;
+            whisper_context_params params = whisper_context_default_params();
+            params.use_gpu = false;
+            whisper_context* ctx = whisper_init_from_file_with_params(Text::ToUtf8(path).c_str(), params);
+            if (!ctx) continue;
+            std::vector<float> pcm = sound;
+            const Clock start = NowMs();
+            const std::string text = Transcribe(ctx, pcm);
+            if (whisper_state* state = whisper_init_state(ctx)) { // черновик на лету
+                g_liveWanted = true;
+                std::vector<float> draftAudio = sound;
+                const Clock draftStart = NowMs();
+                const std::string draft = Transcribe(ctx, draftAudio, state);
+                g_liveWanted = false;
+                Log::Write("бенч черновик: " + std::to_string(NowMs() - draftStart) + " мс «" + draft + "»");
+                whisper_free_state(state);
+            }
+            Log::Write("бенч " + Text::ToUtf8(name) + ": " + std::to_string(NowMs() - start) + " мс, уверенность " + std::to_string(g_confidence.load()) + " «" + text + "»");
+            whisper_free(ctx);
+        }
+        Log::Write("бенч: готово");
+    }).detach();
+}
 
 void Ears::Shutdown() {
     if (g_thread.joinable()) g_thread.join();

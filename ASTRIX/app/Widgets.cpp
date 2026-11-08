@@ -217,7 +217,11 @@ bool Widgets::BeginCombo(const char* id, const char* preview, float width, int f
         ImGui::PopStyleColor(5);
         return false;
     }
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(Px(4), Px(3))); // только внутри списка
+    { // рамка у всплывающего списка
+        const ImVec2 windowPos = ImGui::GetWindowPos(), windowSize = ImGui::GetWindowSize();
+        ImGui::GetWindowDrawList()->AddRect(windowPos, ImVec2(windowPos.x + windowSize.x, windowPos.y + windowSize.y), Theme::Accent().WithAlpha(0.45f), Px(14), 0, Px(1.2f));
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(Px(4), Px(4))); // только внутри списка
     return true;
 }
 
@@ -230,11 +234,19 @@ void Widgets::EndCombo() {
 }
 
 // Пункт списка: высокий, у выбранного — галочка справа
-bool Widgets::ComboItem(const char* label, bool selected) {
-    const bool clicked = ImGui::Selectable(label, selected, 0, ImVec2(0, Px(30)));
+bool Widgets::ComboItem(const char* label, bool selected, ImFont* font) {
+    // свой пункт: скруглённая подсветка, текст поверх неё
+    for (ImGuiCol col : { ImGuiCol_Header, ImGuiCol_HeaderHovered, ImGuiCol_HeaderActive, ImGuiCol_Text }) ImGui::PushStyleColor(col, IM_COL32(0, 0, 0, 0));
+    const bool clicked = ImGui::Selectable(label, selected, 0, ImVec2(0, Px(38)));
+    ImGui::PopStyleColor(4);
+    const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float hover = HoverAnim(ImGui::GetItemID(), ImGui::IsItemHovered());
+    if (selected) dl->AddRectFilled(a, b, Theme::Accent().WithAlpha(0.30f), Px(10));
+    if (hover > 0.01f) dl->AddRectFilled(a, b, Theme::Overlay(static_cast<int>(22 * hover)), Px(10));
+    ImFont* face = font ? font : Theme::semibold;
+    Text(dl, face, ImVec2(a.x + Px(12), (a.y + b.y) * 0.5f - face->LegacySize * 0.55f), selected ? Theme::kInk : Theme::kInkSoft, label);
     if (selected) {
-        const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
-        ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 c(b.x - Px(16), (a.y + b.y) * 0.5f);
         dl->AddLine(ImVec2(c.x - Px(5), c.y), ImVec2(c.x - Px(1.5f), c.y + Px(3.5f)), Theme::kInkSoft, Px(1.6f));
         dl->AddLine(ImVec2(c.x - Px(1.5f), c.y + Px(3.5f)), ImVec2(c.x + Px(5), c.y - Px(3.5f)), Theme::kInkSoft, Px(1.6f));
@@ -250,6 +262,53 @@ bool Widgets::Combo(const char* id, int* current, const char* const items[], int
         EndCombo();
     }
     return changed;
+}
+
+bool Widgets::Check(const char* label, bool* value) {
+    const float box = Px(24), gap = Px(10);
+    const float wrap = std::max(Px(120), ImGui::GetContentRegionAvail().x - box - gap);
+    const ImVec2 textSize = Theme::semibold->CalcTextSizeA(Theme::semibold->LegacySize, FLT_MAX, wrap, label);
+    const ImVec2 pos = ImGui::GetCursorScreenPos(), size(box + gap + textSize.x, std::max(Px(34), textSize.y + Px(10)));
+    ImGui::PushID(label);
+    const bool clicked = ImGui::InvisibleButton("##check", size);
+    const ImGuiID id = ImGui::GetItemID();
+    ImGui::PopID();
+    if (clicked) *value = !*value;
+    const float hover = HoverAnim(id, ImGui::IsItemHovered());
+    const float on = HoverAnim(id + 1, *value, 14.0f);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float y = std::floor(pos.y + (size.y - box) * 0.5f);
+    const ImVec2 a(pos.x, y), b(pos.x + box, y + box);
+    dl->AddRectFilled(a, b, Theme::Overlay(14 + static_cast<int>(14 * hover)), Px(7));
+    if (on > 0.01f) dl->AddRectFilled(a, b, Theme::Accent().Mix({ 255, 255, 255 }, 0.12f).WithAlpha(on), Px(7));
+    dl->AddRect(a, b, on > 0.5f ? Theme::Accent().Mix({ 255, 255, 255 }, 0.35f).WithAlpha(0.9f) : Theme::Overlay(46), Px(7), 0, Px(1.2f));
+    if (on > 0.02f) {
+        const ImVec2 c(a.x + box * 0.5f, a.y + box * 0.5f);
+        const ImU32 mark = IM_COL32(255, 255, 255, static_cast<int>(255 * on));
+        dl->AddLine(ImVec2(c.x - Px(6), c.y), ImVec2(c.x - Px(1.5f), c.y + Px(4.5f)), mark, Px(2.2f));
+        dl->AddLine(ImVec2(c.x - Px(1.5f), c.y + Px(4.5f)), ImVec2(c.x + Px(6.5f), c.y - Px(4.5f)), mark, Px(2.2f));
+    }
+    dl->AddText(Theme::semibold, Theme::semibold->LegacySize, ImVec2(pos.x + box + gap, pos.y + (size.y - textSize.y) * 0.5f), *value ? Theme::kInk : Theme::kInkSoft, label, nullptr, wrap);
+    return clicked;
+}
+
+bool Widgets::Radio(const char* label, bool active) {
+    const ImVec2 textSize = TextSize(Theme::semibold, label);
+    const ImVec2 pos = ImGui::GetCursorScreenPos(), size(textSize.x + Px(30), std::max(Px(38), textSize.y + Px(12)));
+    ImGui::PushID(label);
+    const bool clicked = ImGui::InvisibleButton("##radio", size);
+    const ImGuiID id = ImGui::GetItemID();
+    ImGui::PopID();
+    const float hover = HoverAnim(id, ImGui::IsItemHovered());
+    const float on = HoverAnim(id + 1, active, 14.0f);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 b(pos.x + size.x, pos.y + size.y);
+    const float round = size.y * 0.5f;
+    dl->AddRectFilled(pos, b, Theme::Overlay(12 + static_cast<int>(16 * hover)), round);
+    if (on > 0.01f) dl->AddRectFilled(pos, b, Theme::Accent().WithAlpha(0.9f * on), round);
+    dl->AddRect(pos, b, on > 0.5f ? Theme::Accent().Mix({ 255, 255, 255 }, 0.35f).WithAlpha(0.9f) : Theme::Overlay(36), round, 0, Px(1.2f));
+    Text(dl, Theme::semibold, ImVec2(pos.x + Px(15), pos.y + (size.y - textSize.y) * 0.5f), active ? IM_COL32(255, 255, 255, 255) : Theme::kInkSoft, label);
+    return clicked;
 }
 
 bool Widgets::Slider(const char* id, int* value, int min, int max, const char* format, float width) {
@@ -298,7 +357,7 @@ void Widgets::SmoothScroll(float* scrollTo) {
         target->second = std::clamp(target->second - io.MouseWheel * Px(140), 0.0f, max);
     if (scrollTo && *scrollTo >= 0.0f) { target->second = *scrollTo; *scrollTo = -1.0f; }
     target->second = std::clamp(target->second, 0.0f, max);
-    const float next = now + (target->second - now) * Theme::Ease(io.DeltaTime, 7.4f); // мягкое торможение
+    const float next = now + (target->second - now) * Theme::Ease(io.DeltaTime, 6.0f); // мягкое торможение
     ImGui::SetScrollY(std::fabs(target->second - next) < 0.5f ? target->second : next);
     last = std::fabs(target->second - next) < 0.5f ? target->second : next;
 }

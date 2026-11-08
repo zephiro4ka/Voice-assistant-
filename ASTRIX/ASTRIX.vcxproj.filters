@@ -497,6 +497,24 @@
     <ClCompile Include="app\Logo.cpp">
       <Filter>Аня</Filter>
     </ClCompile>
+    <ClCompile Include="app\Tour.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClCompile Include="app\Overlay.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\Overlay.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClCompile Include="app\ModelStore.cpp">
+      <Filter>Аня</Filter>
+    </ClCompile>
+    <ClInclude Include="app\ModelStore.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
+    <ClInclude Include="app\Tour.h">
+      <Filter>Аня</Filter>
+    </ClInclude>
     <ClCompile Include="app\FileSearch.cpp">
       <Filter>Аня</Filter>
     </ClCompile>

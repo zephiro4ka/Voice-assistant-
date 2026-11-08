@@ -14,7 +14,12 @@
 #include "Platform.h"
 #include <shellapi.h>
 #include <filesystem>
+#include "Ears.h"
+#include "ModelStore.h"
+#include "NeuralVoice.h"
+#include "Overlay.h"
 #include "Rates.h"
+#include "Tour.h"
 #include "Settings.h"
 #include "TextUtils.h"
 #include "Theme.h"
@@ -67,6 +72,7 @@ namespace {
     int g_section = General;
     int g_lastShown = -1;
     char g_query[128] = "";
+    int g_sectionDir = 1;         // разделы листаются вверх или вниз
     float g_contentAnim = 1.0f;   // появление карточек при смене раздела или поиска
     bool g_colorDirty = false;    // цвет меняли в палитре — сохраним в файл, когда палитра закроется
 
@@ -147,7 +153,8 @@ namespace {
         const std::string preview = current.empty()
             ? "авто — " + (chosen ? Text::ToUtf8(chosen->name) : std::string("нет голосов"))
             : Text::ToUtf8(current);
-                if (Widgets::BeginCombo("##voice", preview.c_str(), ControlWidth(w))) {
+        const float listenWidth = ImGui::CalcTextSize("послушать").x + ImGui::GetStyle().FramePadding.x * 2 + ImGui::GetStyle().ItemSpacing.x; // список и кнопка вместе не шире блока
+        if (Widgets::BeginCombo("##voice", preview.c_str(), std::min(ControlWidth(w), w - listenWidth))) {
             auto select = [](const std::wstring& name) {
                 Config::Update([&](Settings& s) { s.voice = name; });
                 Voice::ReloadVoice();
@@ -218,7 +225,6 @@ namespace {
             Config::Update([&](Settings& s) { s.search = static_cast<SearchEngine>(current); });
     }
 
-    void DrawAlwaysOnTop(float) { ToggleSetting("##onTop", &Settings::alwaysOnTop); }
     void DrawQuickPhrases(float) { ToggleSetting("##quickPhrases", &Settings::quickPhrases); }
     void DrawWeatherWidget(float) { ToggleSetting("##weatherWidget", &Settings::weatherWidget); }
 
@@ -404,6 +410,7 @@ namespace {
     void DrawGlass(float) { ToggleSetting("##glass", &Settings::glass); }
     void DrawPlates(float) { ToggleSetting("##plates", &Settings::buttonPlates); }
     void DrawTray(float) { ToggleSetting("##tray", &Settings::tray); }
+    void DrawStartHidden(float);
 
     // ---------------------------------------------------------------- автозапуск, эффект окна
     void DrawAutostart(float) {
@@ -465,7 +472,7 @@ namespace {
     // ---------------------------------------------------------------- полная кастомизация
     void DrawEditBlocks(float) {
         bool on = HomeLayout::Editing();
-        if (ImGui::Checkbox("После нажатия на данную галочку вы можете редактировать позицию ЛЮБОГО БЛОКА", &on)) {
+        if (Widgets::Check("После нажатия на данную галочку вы можете редактировать позицию ЛЮБОГО БЛОКА", &on)) {
             HomeLayout::SetEditing(on);
             if (on) SettingsPage::Close(); // сразу на главный экран — там блоки уже можно тянуть
         }
@@ -484,7 +491,7 @@ namespace {
             ImGui::TextUnformatted(text);
             ImGui::PopTextWrapPos();
             ImGui::Dummy(ImVec2(0, Px(8)));
-            if (needCheck) ImGui::Checkbox("Да, я понимаю — это нельзя отменить", &s_understood);
+            if (needCheck) Widgets::Check("Да, я понимаю — это нельзя отменить", &s_understood);
             ImGui::Dummy(ImVec2(0, Px(8)));
             const bool enabled = !needCheck || s_understood;
             ImGui::BeginDisabled(!enabled);
@@ -627,7 +634,7 @@ namespace {
         if (s_current < 0) s_current = std::clamp(std::atoi(Config::Value("search", "files", "0").c_str()), 0, 2);
         if (Widgets::Combo("##fileSearch", &s_current, kNames, 3, ControlWidth(w))) Config::SetValue("search", "files", std::to_string(s_current));
     }
-    constexpr const char* kVersion = "1.3.1";
+    constexpr const char* kVersion = "1.4";
     std::mutex g_updateMutex;
     std::string g_updateStatus;
     std::atomic<bool> g_updateChecking{ false };
@@ -645,6 +652,24 @@ namespace {
         std::lock_guard lock(g_updateMutex);
         if (!g_updateStatus.empty()) ImGui::TextDisabled("%s", g_updateStatus.c_str());
     }
+    void DrawStartHidden(float) { IniToggle("##startHidden", "anya", "start_hidden", "0", [] {}); }
+    void DrawIslandOn(float) { IniToggle("##islandOn", "overlay", "island", "1", Overlay::Reload); }
+    void DrawResOn(float) { IniToggle("##resOn", "overlay", "res", "0", Overlay::Reload); }
+    void DrawResPin(float) { IniToggle("##resPin", "overlay", "pinned", "0", Overlay::Reload); }
+    void DrawIslandPlace(float w) {
+        static const char* kNames[] = { "сверху по центру", "сверху слева", "сверху справа", "снизу по центру" };
+        int current = std::clamp(std::atoi(Config::Value("overlay", "place", "0").c_str()), 0, 3);
+        if (Widgets::Combo("##islandPlace", &current, kNames, 4, ControlWidth(w))) { Config::SetValue("overlay", "place", std::to_string(current)); Overlay::Reload(); }
+    }
+    void DrawResOpacity(float w) {
+        static int s_value = -1;
+        if (s_value < 0) s_value = std::clamp(std::atoi(Config::Value("overlay", "opacity", "85").c_str()), 20, 100);
+        if (Widgets::Slider("##resOpacity", &s_value, 0, 100, "%d%%", ControlWidth(w))) {
+            s_value = std::max(s_value, 20);
+            Config::SetValue("overlay", "opacity", std::to_string(s_value));
+            Overlay::Reload();
+        }
+    }
     void DrawCozy(float) {
         bool on = Theme::Cozy();
         if (Widgets::Toggle("##cozy", ImGui::GetCursorScreenPos(), &on, Accent())) Theme::SetCozy(on, Theme::CozyPattern());
@@ -652,6 +677,16 @@ namespace {
     void DrawCozyDark(float) {
         bool on = Theme::CozyDark();
         if (Widgets::Toggle("##cozyDark", ImGui::GetCursorScreenPos(), &on, Accent())) Theme::SetCozyDark(on);
+    }
+    void DrawMascot(float w) {
+        const char* names[CozyArt::kMascots];
+        for (int i = 0; i < CozyArt::kMascots; ++i) names[i] = CozyArt::MascotName(i);
+        int current = CozyArt::Mascot();
+        if (Widgets::Combo("##mascot", &current, names, CozyArt::kMascots, ControlWidth(w))) {
+            if (current == CozyArt::kMascotCustom) CozyArt::PickCustom();
+            else CozyArt::SetMascot(current);
+        }
+        if (CozyArt::Mascot() == CozyArt::kMascotCustom && ImGui::Button("другая картинка…")) CozyArt::PickCustom();
     }
     void DrawCozyPattern(float w) {
         const char* names[CozyArt::kPatterns];
@@ -662,8 +697,12 @@ namespace {
     void DrawFontFace(float w) {
         std::vector<const char*> names;
         for (int i = 0; i < Theme::FontCount(); ++i) names.push_back(Theme::FontName(i));
-        int current = Theme::FontIndex();
-        if (Widgets::Combo("##fontFace", &current, names.data(), Theme::FontCount(), ControlWidth(w))) Theme::SetFont(current, Theme::FontScale());
+        const int current = Theme::FontIndex();
+        if (Widgets::BeginCombo("##fontFace", names[current], ControlWidth(w))) {
+            for (int i = 0; i < Theme::FontCount(); ++i) // каждый шрифт написан сам собой
+                if (Widgets::ComboItem(names[i], i == current, Theme::FontPreview(i))) Theme::SetFont(i, Theme::FontScale());
+            Widgets::EndCombo();
+        }
     }
     void DrawFontSize(float w) {
         static int s_scale = -1;
@@ -700,9 +739,28 @@ namespace {
     }
 
     void DrawLearnGuide(float width);
+    void DrawCustomVoice(float width);
+    template <int Guide> void DrawGuide(float width);
+    void DrawTourAgain(float);
+    void DrawModelStore(float width);
+    void DrawSpeechStore(float width);
+    enum { GuideTelegram = 100, GuideDiscord = 101 };
 
     struct Item { Section section; const char* title; const char* hint; void (*draw)(float width); bool inlineControl = false; };
     const Item kItems[] = {
+        { General, "Общие простыми словами", "Как устроен этот раздел.", DrawGuide<General> },
+        { General, "Обучение", "Ещё раз покажу по шагам, что и где находится.", DrawTourAgain },
+        { Appearance, "Внешний вид простыми словами", "С чего начать, если хочется сделать красиво.", DrawGuide<Appearance> },
+        { VoiceSection, "Голос простыми словами", "Как поменять то, как она говорит.", DrawGuide<VoiceSection> },
+        { Hearing, "Распознавание простыми словами", "Если она тебя плохо слышит.", DrawGuide<Hearing> },
+        { AiSection, "Интеллект простыми словами", "Что менять, а что лучше не трогать.", DrawGuide<AiSection> },
+        { SearchSection, "Поиск простыми словами", "Как просить её что-то найти.", DrawGuide<SearchSection> },
+        { Overlay, "Оверлей простыми словами", "Зачем это нужно.", DrawGuide<Overlay> },
+        { Connections, "Телеграм: по шагам", "Сделаешь один раз за пару минут. Иди по порядку.", DrawGuide<GuideTelegram> },
+        { Connections, "Discord: по шагам", "Чтобы друзья видели твой статус в Discord.", DrawGuide<GuideDiscord> },
+        { Privacy, "Приватность простыми словами", "Что и куда уходит.", DrawGuide<Privacy> },
+        { SystemSection, "Система простыми словами", "Если что-то пошло не так.", DrawGuide<SystemSection> },
+        { Updates, "Обновления простыми словами", "Как обновиться.", DrawGuide<Updates> },
         { General, "Имя помощницы", "Так она отзывается на голос и подписывается в окне, Discord и телеграме. Склоняю сама: «Лиза» → «с Лизой».", DrawAssistant },
         { General, "Как тебя зовут", "Так Аня пишет твоё имя на экране и в разговоре.", DrawName },
         { General, "Как произносить имя вслух", "Ник не всегда читается красиво: например, «Sasha_07» можно произносить как «Саша».", DrawSpokenName },
@@ -717,6 +775,7 @@ namespace {
                                        "Выключишь — вернутся прежние цвета.", DrawAutoColors, true },
         { Appearance, "Домашний уют", "Бумага в клетку, рисунки от руки и нарисованная Аня вместо обоев и анимации.", DrawCozy, true },
         { Appearance, "Тёмная тетрадь", "Тёмный вариант «Домашнего уюта»: ночной лист и рисунки мелом.", DrawCozyDark, true },
+        { Appearance, "Кто в центре", "Персонаж вместо шара. Можно поставить свою картинку.", DrawMascot },
         { Appearance, "Рисунки на листе", "Что нарисовано в тетради в формате «Домашний уют».", DrawCozyPattern },
         { Appearance, "Шрифт", "Как выглядит весь текст программы.", DrawFontFace },
         { Appearance, "Размер интерфейса", "Текст и блоки вместе: от 80% до 120%, посередине — обычный размер.", DrawFontSize },
@@ -730,13 +789,16 @@ namespace {
         { Appearance, "Цвет анимации", "Без него фон переливается цветами моего настроения.", DrawAnimationColor },
         { Appearance, "Стекло", "Полупрозрачные панели вместо плотных.", DrawGlass, true },
         { Appearance, "Подложка под кнопками окна", "Подложка за кнопками «свернуть», «развернуть» и «закрыть». Без неё — только значки.", DrawPlates, true },
-        { SystemSection, "Сворачивать в трей", "Крестик прячет меня в трей у часов — я продолжаю слушать. Выйти — правой кнопкой по значку.", DrawTray, true },
+        { SystemSection, "Фоновый режим", "Крестик не закрывает программу, а прячет её к часам. Она продолжает слушать и почти не нагружает компьютер. Открыть — нажать на значок, выйти — правой кнопкой по нему.", DrawTray, true },
+        { SystemSection, "Запускать сразу в фоне", "Программа стартует без окна и ждёт, когда её позовут. Нужен включённый фоновый режим.", DrawStartHidden, true },
 
         { VoiceSection, "Голос", "Silero звучит живее всех, Supertonic и голоса Windows — запасные.", DrawVoice },
         { VoiceSection, "Высота нейроголоса", "0 — естественно, без обработки.", DrawNeuralPitch },
         { VoiceSection, "Высота голосов Windows", "Только для голосов Windows.", DrawPitch },
+        { VoiceSection, "Свой голос", "Можно поставить голос, который скачаешь сам. Три шага.", DrawCustomVoice },
         { VoiceSection, "Скорость речи", "Насколько быстро она говорит.", DrawRate },
 
+        { Hearing, "Модель распознавания", "Быстрая подходит почти всем. Остальные можно скачать здесь же.", DrawSpeechStore },
         { Hearing, "Пауза — конец фразы", "Меньше — отвечает быстрее, но может обрезать фразу на паузе.", DrawSilence },
         { Hearing, "Реакция на кашель и чих", "«Будь здоров!» на чих и «Всё в порядке? Не заболел?» на кашель.", DrawBodySounds, true },
 
@@ -744,6 +806,7 @@ namespace {
         { AiSection, "Характер", "Как Аня разговаривает. Можно написать свой характер.", DrawPersonality },
         { AiSection, "Освобождать видеокарту", "Если долго не спрашиваешь — нейросеть выгружается, и видеокарта свободна для игр. "
                                                "Первый ответ после этого — на 5–15 секунд дольше.", DrawAiIdle },
+        { AiSection, "Скачать нейросеть", "Выбери подходящую и нажми «скачать». Всё остальное программа сделает сама.", DrawModelStore },
         { AiSection, "Нейросеть", "Модель .gguf для домашки и сложных вопросов. Работает прямо на компьютере.", DrawModel },
         { AiSection, "Профиль ответов", "Стандарт, Быстро, Умно, Креативно или Свой. Меняется сразу и с пульта на телефоне.", DrawAiProfile },
         { AiSection, "Свои указания", "Добавляются к системному промпту: как отвечать, о чём помнить.", DrawExtraPrompt },
@@ -774,7 +837,11 @@ namespace {
 
         { SearchSection, "Поисковик", "Куда Аня отправляет «найди …», «загугли …» и «найди в интернете …».", DrawSearchEngine },
 
-        { Overlay, "Поверх всех окон", "Окно Ани не прячется за другими программами — удобно поверх игры.", DrawAlwaysOnTop, true },
+        { Overlay, "Островок «Сейчас играет»", "Подведи мышку к краю экрана — выедет островок с музыкой: пауза, следующий и предыдущий трек.", DrawIslandOn, true },
+        { Overlay, "Где появляется островок", "У какого края экрана его ждать.", DrawIslandPlace },
+        { Overlay, "Окно нагрузки", "Полупрозрачное окно поверх всего: процессор, память, диск, сеть и видеокарта.", DrawResOn, true },
+        { Overlay, "Закрепить окно нагрузки", "Закреплённое окно не мешает: клики проходят сквозь него, а при наведении оно почти исчезает. Пока не закреплено, его можно таскать мышкой.", DrawResPin, true },
+        { Overlay, "Прозрачность окна нагрузки", "Чем меньше, тем прозрачнее.", DrawResOpacity },
         { Overlay, "Быстрые фразы", "Подсказки-кнопки под полем ввода.", DrawQuickPhrases, true },
 
         { WidgetsSection, "Погода", "Слева от сферы: 4 часа, а при наведении — весь день.", DrawWeatherWidget, true },
@@ -838,6 +905,7 @@ namespace {
             ImGui::SetCursorScreenPos(a);
             ImGui::PushID(i);
             if (ImGui::InvisibleButton("##section", ImVec2(b.x - a.x, b.y - a.y)) && (i != g_section || g_query[0])) {
+                g_sectionDir = i >= g_section ? 1 : -1;
                 g_section = i;
                 g_query[0] = '\0';
                 g_contentAnim = 0.0f;
@@ -910,6 +978,192 @@ namespace {
         return height * lines.size();
     }
 
+    void DrawModelRows(int first, int count, float width);
+    void DrawModelStore(float width) { DrawModelRows(0, ModelStore::Count(), width); }
+    void DrawSpeechStore(float width) { DrawModelRows(ModelStore::SpeechFirst(), ModelStore::SpeechCount(), width); }
+    void DrawModelRows(int first, int count, float width) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float rowWidth = std::min(width, Px(720));
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        const auto progress = ModelStore::Now();
+        const std::string active = Ai::ActiveModel();
+        float y = start.y;
+        for (int i = first; i < first + count; ++i) {
+            const auto& model = ModelStore::Get(i);
+            const float rowH = Px(88);
+            const ImVec2 a(start.x, y), b(start.x + rowWidth, y + rowH);
+            const bool speech = std::string(model.id) == "speech";
+            const bool used = speech ? Config::Value("ears", "model", "ggml-small.bin") == model.files[0].name : active == model.files[0].name;
+            dl->AddRectFilled(a, b, used ? Theme::Accent().WithAlpha(0.22f) : Theme::Overlay(10), Px(14));
+            if (used) dl->AddRect(a, b, Theme::Accent().WithAlpha(0.8f), Px(14), 0, Px(1.3f));
+            char size[32];
+            snprintf(size, sizeof(size), "%.1f ГБ", ModelStore::SizeOf(i) / 1073741824.0);
+            Widgets::Text(dl, Theme::title, ImVec2(a.x + Px(16), a.y + Px(10)), Theme::kInk, (std::string(model.name) + " · " + size).c_str());
+            Widgets::Text(dl, Theme::semibold, ImVec2(a.x + Px(16), a.y + Px(10) + Theme::title->LegacySize * 1.25f), Theme::kInkMuted, model.about);
+            ImGui::PushID(i);
+            const float buttonX = b.x - Px(150);
+            ImGui::SetCursorScreenPos(ImVec2(buttonX, a.y + Px(14)));
+            if (progress.running && progress.index == i) {
+                const float k = progress.total ? static_cast<float>(progress.done) / static_cast<float>(progress.total) : 0.0f;
+                char percent[16];
+                snprintf(percent, sizeof(percent), "%d%%", static_cast<int>(k * 100.0f));
+                const float barW = rowWidth - Px(32), barY = b.y - Px(14);
+                dl->AddRectFilled(ImVec2(a.x + Px(16), barY), ImVec2(a.x + Px(16) + barW, barY + Px(6)), Theme::Overlay(24), Px(3));
+                dl->AddRectFilled(ImVec2(a.x + Px(16), barY), ImVec2(a.x + Px(16) + barW * k, barY + Px(6)), Theme::Accent().WithAlpha(1.0f), Px(3));
+                ImGui::TextUnformatted(percent);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("отмена")) ModelStore::Cancel();
+            } else if (used) {
+                ImGui::TextUnformatted("работает");
+            } else if (ModelStore::Installed(i)) {
+                if (ImGui::Button("включить")) {
+                    if (speech) { Config::SetValue("ears", "model", model.files[0].name); Ears::ReloadModel(); }
+                    else { Config::Update([&](Settings& s) { s.model = ModelStore::Path(i); }); Ai::Restart(); }
+                }
+            } else {
+                ImGui::BeginDisabled(progress.running);
+                if (ImGui::Button("скачать")) ModelStore::Download(i);
+                ImGui::EndDisabled();
+            }
+            ImGui::PopID();
+            y += rowH + Px(8);
+        }
+        if (!progress.status.empty() && progress.index >= first && progress.index < first + count) {
+            ImGui::SetCursorScreenPos(ImVec2(start.x, y));
+            ImGui::TextDisabled("%s", progress.status.c_str());
+            y += ImGui::GetTextLineHeightWithSpacing();
+        }
+        ImGui::SetCursorScreenPos(start);
+        ImGui::Dummy(ImVec2(rowWidth, y - start.y));
+    }
+
+    void DrawTourAgain(float) { if (ImGui::Button("показать обучение")) Tour::Start(); }
+
+    // Подчёркнутая ссылка по центру
+    bool GuideLink(ImDrawList* dl, float centerX, float y, const std::string& label, ImVec2& size) {
+        size = Widgets::TextSize(Theme::semibold, label.c_str());
+        const ImVec2 at(centerX - size.x * 0.5f, y);
+        ImGui::SetCursorScreenPos(at);
+        const bool clicked = ImGui::InvisibleButton(label.c_str(), size);
+        const bool hovered = ImGui::IsItemHovered();
+        if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        const ImU32 color = Theme::Accent().Mix({ 255, 255, 255 }, hovered ? 0.8f : 0.55f).WithAlpha(1.0f);
+        Widgets::Text(dl, Theme::semibold, at, color, label.c_str());
+        dl->AddLine(ImVec2(at.x, at.y + size.y + Px(1)), ImVec2(at.x + size.x, at.y + size.y + Px(1)), color, Px(1));
+        return clicked;
+    }
+
+    // Объяснения простыми словами: строка, ссылка на настройку и/или на сайт
+    struct GuideRow { const char* text; const char* setting; const char* url; const char* urlLabel; };
+    void DrawGuideRows(const GuideRow* rows, int count, float width) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float rowWidth = std::min(width, Px(640));
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        const float centerX = start.x + rowWidth * 0.5f;
+        float y = start.y;
+        for (int r = 0; r < count; ++r) {
+            const GuideRow& row = rows[r];
+            y += CenteredText(dl, Theme::semibold, centerX, y, rowWidth, Theme::kInkSoft, row.text) + Px(1);
+            ImGui::PushID(r);
+            ImVec2 size(0, 0);
+            if (row.url && GuideLink(dl, centerX, y, std::string("открыть: ") + row.urlLabel, size)) {
+                ShellExecuteW(nullptr, L"open", Text::ToWide(row.url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            }
+            if (row.url) y += size.y + Px(4);
+            if (row.setting) {
+                int index = -1;
+                for (int i = 0; i < static_cast<int>(std::size(kItems)); ++i) if (std::strcmp(kItems[i].title, row.setting) == 0) index = i;
+                if (index >= 0) {
+                    if (GuideLink(dl, centerX, y, std::string("перейти: ") + row.setting, size)) g_revealRequest = index;
+                    y += size.y + Px(4);
+                }
+            }
+            ImGui::PopID();
+            y += Px(6);
+        }
+        ImGui::SetCursorScreenPos(start);
+        ImGui::Dummy(ImVec2(rowWidth, y - start.y));
+    }
+
+    template <int Guide> void DrawGuide(float width) {
+        static const GuideRow kGeneral[] = {
+            { "Здесь её имя и то, как она обращается к тебе.", "Имя помощницы", nullptr, nullptr },
+            { "Хочешь, чтобы она реагировала только на кнопку, а не на имя? Выключи это.", "Слушать всегда", nullptr, nullptr } };
+        static const GuideRow kAppearance[] = {
+            { "Самое простое — выбрать готовый вид: тетрадка с рисунками.", "Домашний уют", nullptr, nullptr },
+            { "Или поставить свою картинку на фон.", "Свои обои", nullptr, nullptr },
+            { "Мелкий текст? Сделай всё крупнее.", "Размер интерфейса", nullptr, nullptr } };
+        static const GuideRow kVoice[] = {
+            { "Выбери голос и нажми «послушать».", "Голос", nullptr, nullptr },
+            { "Говорит слишком быстро или медленно — поправь здесь.", "Скорость речи", nullptr, nullptr } };
+        static const GuideRow kHearing[] = {
+            { "Она обрывает тебя на полуслове? Сдвинь ползунок вправо.", "Пауза — конец фразы", nullptr, nullptr } };
+        static const GuideRow kAi[] = {
+            { "Обычно тут ничего менять не надо. Хочешь другой стиль ответов — начни с этого.", "Профиль ответов", nullptr, nullptr },
+            { "Характер: строгая, милая или какая угодно.", "Характер", nullptr, nullptr },
+            { "Расскажи о себе, и она будет это учитывать.", "Что помнить обо мне", nullptr, nullptr },
+            { "Всё, что ниже профиля, — для тех, кто разбирается. Сломалось — внизу есть кнопка «всё по умолчанию».", "Применить", nullptr, nullptr } };
+        static const GuideRow kSearch[] = {
+            { "Скажи: «найди котиков» — откроется браузер. Здесь выбирается поисковик.", "Поисковик", nullptr, nullptr },
+            { "Скажи: «найди файл диплом» — она поищет на компьютере.", "Поиск файлов", nullptr, nullptr } };
+        static const GuideRow kOverlay[] = {
+            { "Подведи мышку к верхнему краю экрана — появится музыка с кнопками.", "Островок «Сейчас играет»", nullptr, nullptr },
+            { "Хочешь видеть нагрузку на компьютер поверх игры — включи это.", "Окно нагрузки", nullptr, nullptr } };
+        static const GuideRow kTelegram[] = {
+            { "1. Открой Telegram и нажми «Запустить» у создателя ботов.", nullptr, "https://t.me/BotFather", "BotFather" },
+            { "2. Отправь ему сообщение: /newbot", nullptr, nullptr, nullptr },
+            { "3. Он спросит имя. Напиши любое, например ASTRIX.", nullptr, nullptr, nullptr },
+            { "4. Потом спросит ник. В конце обязательно bot, например sasha_astrix_bot. Занят — придумай другой.", nullptr, nullptr, nullptr },
+            { "5. Придёт сообщение с длинным кодом вида 123456:ABC… Скопируй код и вставь сюда:", "Токен бота", nullptr, nullptr },
+            { "6. Открой бота, который скажет твой номер, и нажми «Запустить».", nullptr, "https://t.me/userinfobot", "userinfobot" },
+            { "7. Скопируй цифры рядом с Id и вставь сюда:", "Кому можно", nullptr, nullptr },
+            { "8. Открой своего бота и нажми «Запустить». Всё! Слева от поля ввода появится кнопка «Пульт».", nullptr, nullptr, nullptr },
+            { "Код бота — как пароль. Никому его не показывай.", nullptr, nullptr, nullptr } };
+        static const GuideRow kDiscord[] = {
+            { "1. Открой страницу Discord и войди в свой аккаунт.", nullptr, "https://discord.com/developers/applications", "страницу Discord" },
+            { "2. Справа вверху нажми синюю кнопку New Application.", nullptr, nullptr, nullptr },
+            { "3. Напиши ASTRIX, поставь галочку и нажми Create.", nullptr, nullptr, nullptr },
+            { "4. Найди строку Application ID и нажми Copy рядом с ней.", nullptr, nullptr, nullptr },
+            { "5. Вставь скопированное сюда:", "ID приложения Discord", nullptr, nullptr },
+            { "6. Включи статус. Discord должен быть открыт на компьютере.", "Статус в Discord", nullptr, nullptr } };
+        static const GuideRow kPrivacy[] = {
+            { "Голос и нейросеть работают прямо на компьютере. Ничего не уходит в облако.", nullptr, nullptr, nullptr },
+            { "Управлять с телефона может только один человек — ты.", "Кому можно", nullptr, nullptr },
+            { "Не хочешь, чтобы бот снимал экран? Выключи.", "Снимки экрана", nullptr, nullptr } };
+        static const GuideRow kSystem[] = {
+            { "Чтобы программа запускалась сама вместе с компьютером.", "Запускать вместе с Windows", nullptr, nullptr },
+            { "Чтобы при закрытии окна она оставалась работать возле часов.", "Фоновый режим", nullptr, nullptr },
+            { "Хочешь расставить блоки на экране по-своему.", "Полная кастомизация", nullptr, nullptr },
+            { "Что-то сломалось? Верни всё как было.", "Настройки по умолчанию", nullptr, nullptr } };
+        static const GuideRow kUpdates[] = {
+            { "Нажми кнопку — скажу, вышла ли новая версия.", "Версия", nullptr, nullptr } };
+#define GUIDE(id, rows) if (Guide == id) { DrawGuideRows(rows, static_cast<int>(std::size(rows)), width); return; }
+        GUIDE(General, kGeneral) GUIDE(Appearance, kAppearance) GUIDE(VoiceSection, kVoice) GUIDE(Hearing, kHearing) GUIDE(AiSection, kAi)
+        GUIDE(SearchSection, kSearch) GUIDE(Overlay, kOverlay) GUIDE(GuideTelegram, kTelegram) GUIDE(GuideDiscord, kDiscord)
+        GUIDE(Privacy, kPrivacy) GUIDE(SystemSection, kSystem) GUIDE(Updates, kUpdates)
+#undef GUIDE
+    }
+
+    void DrawCustomVoice(float width) {
+        static const GuideRow kRows[] = {
+            { "1. Скачай файл голоса с расширением .json. Открой страницу и нажми стрелку скачивания рядом с файлом.", nullptr, "https://huggingface.co/Supertone/supertonic-3/tree/main/voice_styles", "страницу голосов" },
+            { "2. Нажми кнопку ниже: откроется папка. Перетащи скачанный файл туда.", nullptr, nullptr, nullptr } };
+        static const GuideRow kAfter[] = {
+            { "3. Закрой и снова открой ASTRIX. Голос появится в списке выше как «Свой голос».", nullptr, nullptr, nullptr },
+            { "Подходят только файлы голосов для Supertonic. Голоса Windows ставятся отдельно, в параметрах системы.", nullptr, "ms-settings:speech", "голоса Windows" } };
+        DrawGuideRows(kRows, static_cast<int>(std::size(kRows)), width);
+        const float buttonWidth = ImGui::CalcTextSize("открыть папку с голосами").x + ImGui::GetStyle().FramePadding.x * 2;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (std::min(width, Px(640)) - buttonWidth) * 0.5f);
+        if (ImGui::Button("открыть папку с голосами")) {
+            const std::wstring folder = NeuralVoice::VoicesFolder();
+            if (!folder.empty()) ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        }
+        ImGui::Dummy(ImVec2(0, Px(8)));
+        ImGui::PushID("after");
+        DrawGuideRows(kAfter, static_cast<int>(std::size(kAfter)), width);
+        ImGui::PopID();
+    }
+
     // «Обучение»: что на что влияет — со ссылками на сами настройки
     void DrawLearnGuide(float width) {
         struct Link { const char* what; const char* title; };
@@ -941,13 +1195,26 @@ namespace {
             const bool hovered = ImGui::IsItemHovered();
             ImGui::PopID();
             if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-            const ImU32 color = Theme::Accent().Mix({ 255, 255, 255 }, hovered ? 0.45f : 0.15f).WithAlpha(1.0f);
+            const ImU32 color = Theme::Accent().Mix({ 255, 255, 255 }, hovered ? 0.8f : 0.55f).WithAlpha(1.0f);
             Widgets::Text(dl, Theme::semibold, at, color, label.c_str());
             dl->AddLine(ImVec2(at.x, at.y + size.y + Px(1)), ImVec2(at.x + size.x, at.y + size.y + Px(1)), color, Px(1));
             y += size.y + Px(9);
         }
         ImGui::SetCursorScreenPos(start);
         ImGui::Dummy(ImVec2(rowWidth, y - start.y));
+    }
+
+    // Сложные настройки спрятаны, чтобы не пугать новичков
+    bool g_more[kSections] = {};
+    bool IsAdvanced(const char* title) {
+        static const char* kTitles[] = { "Время на размышления", "Размышления", "Seed", "Глаза модели", "Слои на видеокарте", "Потоки процессора", "Размер контекста",
+            "Запросов одновременно", "Свои параметры движка", "Применить", "Загружать при запуске", "Освобождать в играх", "Эффект окна", "Плотность фона", "Затемнение обоев",
+            "Цвета по обоям", "Скорость анимации", "Анимировать в неактивном окне", "Цвет анимации", "Цвет фона", "Стекло", "Подложка под кнопками окна", "Высота нейроголоса",
+            "Высота голосов Windows", "Как произносить имя вслух", "Показывать музыку", "Показывать видео", "Блокировать при «Выключить»", "Журнал" };
+        const std::string name = title;
+        if (name.rfind("Разговор:", 0) == 0 || name.rfind("Задачи:", 0) == 0) return true;
+        for (const char* t : kTitles) if (name == t) return true;
+        return false;
     }
 
     // Карточка раздела: заголовок, пояснение и его настройки (только подходящие под поиск)
@@ -966,29 +1233,50 @@ namespace {
         Widgets::Text(dl, Theme::hero, ImVec2(nameLeft, head.y), Theme::kInk, kInfo[section].name);
         const float aboutHeight = CenteredText(dl, Theme::semibold, head.x + inner * 0.5f, head.y + Theme::hero->LegacySize + Px(6), inner, Theme::kInkMuted, kInfo[section].about);
         ImGui::Dummy(ImVec2(inner, Theme::hero->LegacySize + Px(6) + aboutHeight + Px(4)));
-        const bool grid = section == WidgetsSection; // виджеты — блоками, как в сценариях
         const float gridLeft = head.x;
         float gridTop = ImGui::GetCursorScreenPos().y, gridRow = 0;
         int blockIndex = 0;
+        bool hasMore = false;
 
-        bool first = true;
+        static float s_rowHeights[kSections][64] = {};
+        float* s_rowHeight = s_rowHeights[section];
         ImVec2 glowMin(0, 0), glowMax(0, 0);
         for (const Item& item : kItems) {
             if (item.section != section || !Matches(item, query)) continue;
+            if (IsAdvanced(item.title)) {
+                hasMore = true;
+                if (!g_more[section] && query.empty()) continue;
+            }
             const bool glowing = &item - kItems == g_reveal;
-            if (grid) {
-                const float gap = Px(12), blockW = (inner - gap) * 0.5f, blockPad = Px(14);
-                static float s_rowHeight[16] = {};
+            {
+                const std::string name = item.title;
+                const bool wide = name.find("простыми словами") != std::string::npos || name.find("по шагам") != std::string::npos ||
+                                  name == "Как это работает" || name == "Скачать нейросеть" || name == "Модель распознавания" || name == "Свой голос" || name == "Полная кастомизация";
+                const float gap = Px(12), blockW = wide ? inner : (inner - gap) * 0.5f, blockPad = Px(14);
+                if (wide && blockIndex % 2 == 1) { s_rowHeight[std::min(blockIndex / 2, 63)] = gridRow; gridTop += gridRow + gap; gridRow = 0; ++blockIndex; } // широкий блок — с новой строки
                 static std::unordered_map<std::string, float> s_blockControl;
-                const int column = blockIndex % 2, rowIndex = std::min(blockIndex / 2, 15);
+                const int column = blockIndex % 2, rowIndex = std::min(blockIndex / 2, 63);
                 const ImVec2 a(gridLeft + column * (blockW + gap), gridTop), b(a.x + blockW, a.y + std::max(s_rowHeight[rowIndex], Px(90)));
                 dl->AddRectFilled(a, b, Theme::Overlay(11), Px(16));
                 dl->AddRect(a, b, Theme::Overlay(20), Px(16), 0, Px(1));
+                { // неоновая подсветка блока под мышкой — цветом интерфейса
+                    static std::unordered_map<std::string, float> s_neon;
+                    float& neon = s_neon[name];
+                    const bool over = ImGui::IsMouseHoveringRect(a, b) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+                    neon += ((over ? 1.0f : 0.0f) - neon) * Theme::Ease(ImGui::GetIO().DeltaTime, 9.0f);
+                    if (neon > 0.01f) {
+                        const Theme::Color glow = Theme::Accent().Mix({ 255, 255, 255 }, 0.25f);
+                        dl->AddRectFilled(a, b, glow.WithAlpha(0.06f * neon), Px(16));
+                        for (int ring = 3; ring >= 1; --ring)
+                            dl->AddRect(ImVec2(a.x - Px(1.5f * ring), a.y - Px(1.5f * ring)), ImVec2(b.x + Px(1.5f * ring), b.y + Px(1.5f * ring)), glow.WithAlpha(0.13f * (4 - ring) * neon), Px(16 + 1.5f * ring), 0, Px(2));
+                        dl->AddRect(a, b, glow.WithAlpha(0.85f * neon), Px(16), 0, Px(1.4f));
+                    }
+                }
                 dl->AddRectFilled(ImVec2(a.x + Px(16), a.y), ImVec2(b.x - Px(16), a.y + Px(3)), Theme::Accent().WithAlpha(0.9f), Px(2));
                 ImGui::PushID(item.title);
                 const float blockCenter = a.x + blockW * 0.5f;
                 float blockY = a.y + blockPad;
-                blockY += CenteredText(dl, Theme::display, blockCenter, blockY, blockW - blockPad * 2, Theme::kInk, Text::Brand(item.title, Config::Get().assistant));
+                blockY += CenteredText(dl, Theme::title, blockCenter, blockY, blockW - blockPad * 2, Theme::kInk, Text::Brand(item.title, Config::Get().assistant));
                 blockY += CenteredText(dl, Theme::semibold, blockCenter, blockY + Px(2), blockW - blockPad * 2, Theme::kInkMuted, Text::Brand(item.hint, Config::Get().assistant)) + Px(10);
                 float& control = s_blockControl[item.title];
                 ImGui::SetCursorScreenPos(ImVec2(blockCenter - control * 0.5f, blockY));
@@ -998,46 +1286,28 @@ namespace {
                 control = ImGui::GetItemRectSize().x;
                 gridRow = std::max(gridRow, ImGui::GetItemRectMax().y + blockPad - a.y);
                 ImGui::PopID();
-                if (glowing) { glowMin = a; glowMax = b; }
-                if (column == 1) { s_rowHeight[rowIndex] = gridRow; gridTop += gridRow + gap; gridRow = 0; }
+                if (glowing) {
+                    glowMin = a; glowMax = b;
+                    if (g_revealScroll) { // доехать, чтобы блок был в верхней трети
+                        g_scrollTo = ImGui::GetScrollY() + (a.y - ImGui::GetWindowPos().y) - ImGui::GetWindowHeight() * 0.3f;
+                        g_revealScroll = false;
+                    }
+                }
+                if (column == 1 || wide) { s_rowHeight[rowIndex] = gridRow; gridTop += gridRow + gap; gridRow = 0; }
                 else s_rowHeight[rowIndex] = std::max(s_rowHeight[rowIndex], gridRow); // высоту ряда задаёт самый высокий блок
-                ++blockIndex;
+                blockIndex += wide ? 2 : 1;
                 continue;
             }
-            const ImVec2 at = ImGui::GetCursorScreenPos();
-            if (!first) {
-                dl->AddLine(ImVec2(at.x, at.y), ImVec2(at.x + inner, at.y), Theme::Overlay(10), Px(1));
-            }
-            ImGui::Dummy(ImVec2(0, Px(first ? 2.0f : 7.0f)));
-            first = false;
-
-            ImGui::PushID(item.title);
-            const ImVec2 row = ImGui::GetCursorScreenPos();
-            const float centerX = row.x + inner * 0.5f;
-            float y = row.y + CenteredText(dl, Theme::display, centerX, row.y, inner, Theme::kInk, Text::Brand(item.title, Config::Get().assistant));
-            y += Px(3);
-            y += CenteredText(dl, Theme::semibold, centerX, y, std::min(inner, Px(620)), Theme::kInkMuted, Text::Brand(item.hint, Config::Get().assistant));
-            y += Px(7);
-            // управление — тоже по центру: ширину узнаём на прошлом кадре
-            static std::unordered_map<std::string, float> s_widths;
-            float& controlWidth = s_widths[item.title];
-            ImGui::SetCursorScreenPos(ImVec2(row.x + (inner - controlWidth) * 0.5f, y));
-            ImGui::BeginGroup();
-            item.draw(inner);
-            ImGui::EndGroup();
-            controlWidth = ImGui::GetItemRectSize().x;
-            ImGui::Dummy(ImVec2(0, Px(5)));
-            ImGui::PopID();
-            if (glowing) {
-                glowMin = ImVec2(row.x - Px(14), row.y - Px(10));
-                glowMax = ImVec2(row.x + inner + Px(14), ImGui::GetCursorScreenPos().y - Px(2));
-                if (g_revealScroll) { // доехать, чтобы пункт был в верхней трети
-                    g_scrollTo = ImGui::GetScrollY() + (row.y - ImGui::GetWindowPos().y) - ImGui::GetWindowHeight() * 0.3f;
-                    g_revealScroll = false;
-                }
-            }
         }
-        if (grid) {
+        if (blockIndex % 2 == 1) s_rowHeight[std::min(blockIndex / 2, 63)] = gridRow; // одинокий блок в последнем ряду не хранит чужую высоту
+        {
+            if (hasMore && query.empty()) { // кнопка раскрытия — под блоками
+                const char* label = g_more[section] ? "скрыть дополнительные настройки" : "показать дополнительные настройки";
+                const float buttonWidth = ImGui::CalcTextSize(label).x + Px(36);
+                ImGui::SetCursorScreenPos(ImVec2(gridLeft + (inner - buttonWidth) * 0.5f, gridTop + gridRow + Px(4)));
+                if (ImGui::Button(label, ImVec2(buttonWidth, 0))) g_more[section] = !g_more[section];
+                gridTop += ImGui::GetFrameHeight() + Px(8);
+            }
             ImGui::SetCursorScreenPos(ImVec2(gridLeft, gridTop + gridRow + Px(10)));
             ImGui::Dummy(ImVec2(inner, 0));
         }
@@ -1082,6 +1352,7 @@ namespace {
 
 void SettingsPage::Open(int section) {
     if (section >= 0 && section < kSections && section != g_section) {
+        g_sectionDir = section > g_section ? 1 : -1;
         g_section = section;
         g_contentAnim = 0.0f;
     }
@@ -1098,12 +1369,12 @@ bool SettingsPage::Covers() { return g_open && g_anim > 0.97f; }
 float SettingsPage::Visibility() { return g_anim; }
 
 void SettingsPage::Draw(ImVec2 screen, float top, float dt) {
-    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * Theme::Ease(dt, 8.7f);
-    if (g_anim < 0.01f) return;
+    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * Theme::Ease(dt, g_open ? 13.0f : 24.0f); // старая страница исчезает сразу, не наезжая на новую
+    if (g_anim < 0.04f) return;
     const float ease = 1.0f - std::pow(1.0f - g_anim, 3.0f);
     const float slide = (1.0f - ease) * Px(14); // въезжает чуть снизу
 
-    ImGui::SetNextWindowPos(ImVec2(0, top));
+    ImGui::SetNextWindowPos(ImVec2(Theme::PageShift(g_open, g_anim, screen.x), top));
     ImGui::SetNextWindowSize(ImVec2(screen.x, screen.y - top));
     if (g_justOpened) ImGui::SetNextWindowFocus();
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ease);
@@ -1141,6 +1412,9 @@ void SettingsPage::Draw(ImVec2 screen, float top, float dt) {
         searchPos = ImVec2(left, contentTop);
         contentTop += Px(52);
     }
+    Tour::Mark("search", searchPos, ImVec2(searchPos.x + searchWidth, searchPos.y + Px(38)));
+    Tour::Mark("content", ImVec2(left, contentTop), ImVec2(right, std::min(origin.y + size.y - Px(12), contentTop + Px(520))));
+    Tour::Mark("sidebar", ImVec2(origin.x + Px(20), contentTop), ImVec2(origin.x + Px(20) + sideWidth, contentTop + Px(37) * kSections + Px(14)));
     DrawSidebar(dl, ImVec2(origin.x + Px(20), contentTop), sideWidth); // верх меню — на одной линии с карточкой настроек
     if (DrawSearchField(dl, searchPos, searchWidth)) { g_lastShown = -1; g_contentAnim = 0.3f; } // новый запрос — список снова сверху
 
@@ -1156,9 +1430,9 @@ void SettingsPage::Draw(ImVec2 screen, float top, float dt) {
     ImGui::BeginChild("##settingsCards", ImVec2(origin.x + size.x - Px(6) - (left - Px(4)), origin.y + size.y - contentTop), ImGuiChildFlags_None,
         ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollWithMouse);
     Widgets::SmoothScroll(&g_scrollTo);
-    g_contentAnim += (1.0f - g_contentAnim) * Theme::Ease(dt, 5.6f);
+    g_contentAnim += (1.0f - g_contentAnim) * Theme::Ease(dt, 13.0f);
     const float appear = 1.0f - std::pow(1.0f - g_contentAnim, 3.0f);
-    ImGui::SetCursorPos(ImVec2(Px(4), Px(2) + (1.0f - appear) * Px(18))); // карточки чуть выезжают снизу
+    ImGui::SetCursorPos(ImVec2(Px(4), Px(2) + std::round((1.0f - appear) * Px(70) * g_sectionDir))); // следующий раздел приезжает снизу, предыдущий — сверху
     bool any = false;
     for (int s = 0; s < kSections; ++s) {
         const bool show = std::any_of(std::begin(kItems), std::end(kItems), [&](const Item& item) {
@@ -1256,6 +1530,7 @@ bool SettingsPage::PollReveal() {
     const int index = g_revealRequest.exchange(-1);
     if (index < 0) return false;
     Open(kItems[index].section);
+    if (IsAdvanced(kItems[index].title)) g_more[kItems[index].section] = true;
     g_query[0] = '\0';
     g_reveal = index;
     g_revealTime = 0.0f;

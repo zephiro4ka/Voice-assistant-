@@ -1,4 +1,5 @@
 #include "HomeLayout.h"
+#include "Tour.h"
 
 #include "Settings.h"
 #include "Theme.h"
@@ -89,6 +90,7 @@ bool HomeLayout::Moved(const char* id) {
 }
 
 void HomeLayout::Report(const char* id, const char* label, ImVec2 min, ImVec2 max, bool canResize) {
+    Tour::Mark(id, min, max);
     if (Editing()) g_boxes.push_back({ id, label, min, max, canResize });
 }
 

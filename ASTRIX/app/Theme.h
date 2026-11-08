@@ -32,7 +32,13 @@ namespace Theme {
     void LoadFonts();               // загрузить шрифты по настройкам
     float Px(float value);          // значение в пикселях с учётом DPI
     // Доля пути за кадр для плавного сближения: одинаково мягко при любой частоте кадров
-    inline float Ease(float dt, float speed) { return 1.0f - std::exp(-dt * speed); }
+    inline float Ease(float dt, float speed) { return 1.0f - std::exp(-std::fmin(dt, 1.0f / 40.0f) * speed); } // долгий кадр не даёт рывка
+    inline int pageDirection = 1;   // куда листаем вкладки: 1 — вправо, -1 — влево
+    // Смещение страницы при переходе: новая въезжает со стороны своей вкладки, старая уезжает в другую
+    inline float PageShift(bool open, float anim, float width) {
+        const float rest = std::pow(1.0f - std::fmin(anim, 1.0f), 3.0f);
+        return std::round((open ? 1.0f : -1.0f) * pageDirection * rest * width * 0.28f);
+    }
 
     // Плавно перетекающая палитра из трёх цветов
     void UpdatePalette(Mood mood, float dt);
@@ -50,6 +56,7 @@ namespace Theme {
     int FontCount();
     const char* FontName(int index);
     int FontIndex();
+    ImFont* FontPreview(int index);               // этот шрифт для примера в настройках
     int FontScale();
     void SetFont(int index, int scale);
 
@@ -59,6 +66,7 @@ namespace Theme {
     void SetCozy(bool on, int pattern);
     bool CozyDark();                              // тёмный вариант: ночная тетрадь
     void SetCozyDark(bool on);
+    int DoodleColor();                            // свой цвет рисунков (-1 — разноцветные)
     bool Paper();                                 // светлая бумага
 
     bool ButtonPlates();                          // подложка под кнопками окна

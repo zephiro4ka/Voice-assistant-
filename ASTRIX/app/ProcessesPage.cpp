@@ -429,7 +429,7 @@ namespace {
             static const char* kGraphs[] = { "нет", "линия", "заливка", "столбики" };
             for (int i = 0; i < 4; ++i) {
                 if (i) ImGui::SameLine();
-                if (ImGui::RadioButton(kGraphs[i], t.graph == i)) { t.graph = i; changed = true; }
+                if (Widgets::Radio(kGraphs[i], t.graph == i)) { t.graph = i; changed = true; }
             }
             ImGui::TextDisabled("цвет");
             const float r = Px(10);
@@ -453,9 +453,9 @@ namespace {
                 }
                 ImGui::EndPopup();
             }
-            if (ImGui::Checkbox("подпись снизу", &t.sub)) changed = true;
+            if (Widgets::Check("подпись снизу", &t.sub)) changed = true;
             ImGui::SameLine();
-            if (ImGui::Checkbox("значок температуры", &t.temp)) changed = true;
+            if (Widgets::Check("значок температуры", &t.temp)) changed = true;
             ImGui::Separator();
             if (ImGui::Button("обычный размер")) { t.w = 1000 / std::clamp(IntValue("columns", 3), 2, 4); t.h = 130; changed = true; }
             ImGui::SameLine();
@@ -477,20 +477,20 @@ namespace {
         if (Widgets::BeginPopupAnimated("##metricsMenu")) {
             ImGui::TextDisabled("расстановка");
             const bool grid = GridMode();
-            if (ImGui::RadioButton("сетка — плитки прилипают", grid)) StoreValue("layout", "grid");
+            if (Widgets::Radio("сетка — плитки прилипают", grid)) StoreValue("layout", "grid");
             ImGui::SameLine();
-            if (ImGui::RadioButton("полная свобода", !grid)) StoreValue("layout", "free");
+            if (Widgets::Radio("полная свобода", !grid)) StoreValue("layout", "free");
             ImGui::TextDisabled("колонок в сетке");
             const int columns = std::clamp(IntValue("columns", 3), 2, 4);
             for (int c = 2; c <= 4; ++c) {
                 if (c > 2) ImGui::SameLine();
-                if (ImGui::RadioButton(std::to_string(c).c_str(), columns == c)) StoreValue("columns", std::to_string(c));
+                if (Widgets::Radio(std::to_string(c).c_str(), columns == c)) StoreValue("columns", std::to_string(c));
             }
             ImGui::Separator();
             ImGui::TextDisabled("что показывать");
             for (const Metric& m : kMetrics) {
                 bool on = std::find(order.begin(), order.end(), m.key) != order.end();
-                if (ImGui::Checkbox(m.name, &on)) {
+                if (Widgets::Check(m.name, &on)) {
                     if (on) order.push_back(m.key);
                     else order.erase(std::remove(order.begin(), order.end(), std::string(m.key)), order.end());
                     SaveOrder(order);
@@ -963,12 +963,12 @@ bool ProcessesPage::Covers() { return g_open && g_anim > 0.97f; }
 float ProcessesPage::Visibility() { return g_anim; }
 
 void ProcessesPage::Draw(ImVec2 screen, float top, float dt) {
-    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * Theme::Ease(dt, 8.7f);
-    if (g_anim < 0.01f) return;
+    g_anim += ((g_open ? 1.0f : 0.0f) - g_anim) * Theme::Ease(dt, g_open ? 13.0f : 24.0f); // старая страница исчезает сразу, не наезжая на новую
+    if (g_anim < 0.04f) return;
     const float ease = 1.0f - std::pow(1.0f - g_anim, 3.0f);
     const ProcessMonitor::Snapshot s = ProcessMonitor::Get();
 
-    ImGui::SetNextWindowPos(ImVec2(0, top));
+    ImGui::SetNextWindowPos(ImVec2(Theme::PageShift(g_open, g_anim, screen.x), top));
     ImGui::SetNextWindowSize(ImVec2(screen.x, screen.y - top));
     ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ease);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
