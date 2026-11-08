@@ -61,7 +61,7 @@ powershell -ExecutionPolicy Bypass -File tools\make-release.ps1
 `-WithModels` добавит голоса и распознавание речи из `models\`.
 
 Движок нейросети — официальная сборка [llama.cpp](https://github.com/ggml-org/llama.cpp/releases) (win-vulkan-x64)
-в `zephiro4ka\third_party\llama.cpp`; ONNX Runtime — в `zephiro4ka\third_party\onnxruntime`.
+в `ASTRIX\third_party\llama.cpp`; ONNX Runtime — в `ASTRIX\third_party\onnxruntime`.
 
 ## Личные данные
 

@@ -102,7 +102,7 @@ namespace {
     json Activity(const Options& o) {
         // своя картинка из настроек ([discord] image) — главнее
         const auto track = MediaNow::Snapshot();
-        json assets = { { "large_image", o.image }, { "large_text", "Anya — голосовая помощница" } };
+        json assets = { { "large_image", o.image }, { "large_text", "ASTRIX - Voice assistant" } };
         auto cut = [](const std::string& s) { return Text::ToUtf8(Text::ToWide(s).substr(0, 120)); }; // предел Discord — 128
         if (track.present && track.playing && !track.title.empty()) {
             const bool video = IsBrowser(track.app);
@@ -132,7 +132,7 @@ namespace {
                 options = Load();
                 if (options.enabled && !options.appId.empty()) {
                     const std::string own = Text::Trim(Config::Value("discord", "image", ""));
-                    options.image = own.empty() ? PickImage(options.appId) : own;
+                    options.image = own.empty() ? "https://raw.githubusercontent.com/zephiro4ka/Voice-assistant-ASTRIX/main/assets/discord.png" : own;
                 }
                 if (pipe.h != INVALID_HANDLE_VALUE && !options.enabled) { // выключили — убрать статус
                     pipe.Write(1, { { "cmd", "SET_ACTIVITY" }, { "args", { { "pid", GetCurrentProcessId() } } }, { "nonce", std::to_string(nonce) } });

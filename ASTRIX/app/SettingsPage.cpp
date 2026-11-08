@@ -635,13 +635,13 @@ namespace {
         ImGui::TextUnformatted((std::string("ASTRIX ") + kVersion).c_str());
         if (ImGui::Button(g_updateChecking.load() ? "проверяю…" : "проверить обновления") && !g_updateChecking.exchange(true))
             std::thread([] {
-                const auto tag = Json::FindStrings(Http::HttpsGet(L"api.github.com", L"/repos/zephiro4ka/Voice-assistant-/releases/latest", 12000), "tag_name", 1);
+                const auto tag = Json::FindStrings(Http::HttpsGet(L"api.github.com", L"/repos/zephiro4ka/Voice-assistant-ASTRIX/releases/latest", 12000), "tag_name", 1);
                 std::lock_guard lock(g_updateMutex);
                 g_updateStatus = tag.empty() ? "не удалось проверить — нет связи с GitHub" : tag[0] == std::string("v") + kVersion ? "у тебя последняя версия" : "вышла версия " + tag[0];
                 g_updateChecking = false;
             }).detach();
         ImGui::SameLine();
-        if (ImGui::Button("страница релизов")) ShellExecuteW(nullptr, L"open", L"https://github.com/zephiro4ka/Voice-assistant-/releases/latest", nullptr, nullptr, SW_SHOWNORMAL);
+        if (ImGui::Button("страница релизов")) ShellExecuteW(nullptr, L"open", L"https://github.com/zephiro4ka/Voice-assistant-ASTRIX/releases/latest", nullptr, nullptr, SW_SHOWNORMAL);
         std::lock_guard lock(g_updateMutex);
         if (!g_updateStatus.empty()) ImGui::TextDisabled("%s", g_updateStatus.c_str());
     }
@@ -699,6 +699,8 @@ namespace {
         }
     }
 
+    void DrawLearnGuide(float width);
+
     struct Item { Section section; const char* title; const char* hint; void (*draw)(float width); bool inlineControl = false; };
     const Item kItems[] = {
         { General, "Имя помощницы", "Так она отзывается на голос и подписывается в окне, Discord и телеграме. Склоняю сама: «Лиза» → «с Лизой».", DrawAssistant },
@@ -738,12 +740,13 @@ namespace {
         { Hearing, "Пауза — конец фразы", "Меньше — отвечает быстрее, но может обрезать фразу на паузе.", DrawSilence },
         { Hearing, "Реакция на кашель и чих", "«Будь здоров!» на чих и «Всё в порядке? Не заболел?» на кашель.", DrawBodySounds, true },
 
-        { Learning, "Характер", "Как Аня разговаривает. Можно написать свой характер.", DrawPersonality },
+        { Learning, "Как это работает", "Нажми на ссылку — перейду к настройке и подсвечу её.", DrawLearnGuide },
+        { AiSection, "Характер", "Как Аня разговаривает. Можно написать свой характер.", DrawPersonality },
         { AiSection, "Освобождать видеокарту", "Если долго не спрашиваешь — нейросеть выгружается, и видеокарта свободна для игр. "
                                                "Первый ответ после этого — на 5–15 секунд дольше.", DrawAiIdle },
         { AiSection, "Нейросеть", "Модель .gguf для домашки и сложных вопросов. Работает прямо на компьютере.", DrawModel },
         { AiSection, "Профиль ответов", "Стандарт, Быстро, Умно, Креативно или Свой. Меняется сразу и с пульта на телефоне.", DrawAiProfile },
-        { Learning, "Свои указания", "Добавляются к системному промпту: как отвечать, о чём помнить.", DrawExtraPrompt },
+        { AiSection, "Свои указания", "Добавляются к системному промпту: как отвечать, о чём помнить.", DrawExtraPrompt },
         { AiSection, "Размышления", "Когда модель думает «про себя» перед ответом. Долго, зато точнее.", DrawThinkMode },
         { AiSection, "Время на размышления", "Сколько модель может думать при голосовом ответе. Потом ответит сразу.", DrawThinkSeconds },
         { AiSection, "Разговор: температура", "Выше — живее и неожиданнее, ниже — точнее и однообразнее.", DrawChatTemp },
@@ -788,7 +791,7 @@ namespace {
                                             "Пока включено, работает защищённый туннель cloudflared.", DrawRemoteDesktop, true },
         { Privacy, "Блокировать при «Выключить»", "Надёжнее, но тогда «☀ Включить» покажет экран блокировки — пароль придётся вводить "
                                                      "за компьютером: снять блокировку с телефона Windows не даёт.", DrawLockOnStandby, true },
-        { Connections, "Статус в Discord", "«Играет в Anya», а когда играет музыка или видео — «Слушает» или «Смотрит».", DrawDiscord, true },
+        { Connections, "Статус в Discord", "«Играет в ASTRIX», а когда играет музыка или видео — «Слушает» или «Смотрит».", DrawDiscord, true },
         { Connections, "ID приложения Discord", "Создай приложение «ASTRIX» на discord.com/developers и вставь его Application ID. "
                                                 "Картинка — ассет «anya» в Rich Presence → Art Assets.", DrawDiscordApp },
         { Connections, "Показывать музыку", "«Слушает: трек — исполнитель» из Яндекс Музыки, Spotify и других плееров.", DrawDiscordMusic, true },
@@ -798,7 +801,7 @@ namespace {
         { Updates, "Удалить программу", "Полностью: все данные, настройки и автозапуск. Перед удалением спрошу ещё раз.", DrawRemoveAll },
         { Privacy, "Снимки экрана", "Разрешить боту и нейросети снимать экран по запросу с телефона.", DrawPrivacyScreen, true },
         { Privacy, "Журнал", "Файл с действиями программы лежит только на этом компьютере.", DrawClearLog },
-        { Learning, "Что помнить обо мне", "Интересы, привычки, как к тебе обращаться. Нейросеть учитывает это в каждом ответе.", DrawAboutMe },
+        { AiSection, "Что помнить обо мне", "Интересы, привычки, как к тебе обращаться. Нейросеть учитывает это в каждом ответе.", DrawAboutMe },
         { SearchSection, "Поиск файлов", "Как выполнять «найди файл …»: своим поиском ASTRIX, через Windows или через Everything.", DrawFileSearch },
         { Updates, "Версия", "Проверить, вышла ли новая версия на GitHub.", DrawUpdates },
         { Connections, "Показывать видео", "«Смотрит: название видео» из браузера (YouTube).", DrawDiscordVideo, true },
@@ -905,6 +908,46 @@ namespace {
         for (size_t i = 0; i < lines.size(); ++i)
             Widgets::Text(dl, font, ImVec2(centerX - Widgets::TextSize(font, lines[i].c_str()).x * 0.5f, top + height * i), color, lines[i].c_str());
         return height * lines.size();
+    }
+
+    // «Обучение»: что на что влияет — со ссылками на сами настройки
+    void DrawLearnGuide(float width) {
+        struct Link { const char* what; const char* title; };
+        static const Link kLinks[] = {
+            { "Манера речи: строгая, дружелюбная, милая или твоя собственная.", "Характер" },
+            { "Правила на каждый ответ: как отвечать и чего избегать.", "Свои указания" },
+            { "Факты о тебе. Нейросеть учитывает их в каждом разговоре, сама ничего не запоминает.", "Что помнить обо мне" },
+            { "Как к тебе обращаться и как произносить ник вслух.", "Как произносить имя вслух" },
+            { "Выше — живее и неожиданнее, ниже — точнее.", "Разговор: температура" },
+            { "Когда модель сначала думает, а потом отвечает.", "Размышления" },
+            { "Какая модель отвечает на вопросы.", "Нейросеть" },
+        };
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float rowWidth = std::min(width, Px(620));
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        const float centerX = start.x + rowWidth * 0.5f;
+        float y = start.y;
+        for (const Link& link : kLinks) {
+            int index = -1;
+            for (int i = 0; i < static_cast<int>(std::size(kItems)); ++i) if (std::strcmp(kItems[i].title, link.title) == 0) index = i;
+            if (index < 0) continue;
+            y += CenteredText(dl, Theme::semibold, centerX, y, rowWidth, Theme::kInkSoft, link.what) + Px(1);
+            const std::string label = std::string(kInfo[kItems[index].section].name) + " → " + link.title;
+            const ImVec2 size = Widgets::TextSize(Theme::semibold, label.c_str());
+            const ImVec2 at(centerX - size.x * 0.5f, y);
+            ImGui::SetCursorScreenPos(at);
+            ImGui::PushID(link.title);
+            if (ImGui::InvisibleButton("##link", size)) g_revealRequest = index;
+            const bool hovered = ImGui::IsItemHovered();
+            ImGui::PopID();
+            if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            const ImU32 color = Theme::Accent().Mix({ 255, 255, 255 }, hovered ? 0.45f : 0.15f).WithAlpha(1.0f);
+            Widgets::Text(dl, Theme::semibold, at, color, label.c_str());
+            dl->AddLine(ImVec2(at.x, at.y + size.y + Px(1)), ImVec2(at.x + size.x, at.y + size.y + Px(1)), color, Px(1));
+            y += size.y + Px(9);
+        }
+        ImGui::SetCursorScreenPos(start);
+        ImGui::Dummy(ImVec2(rowWidth, y - start.y));
     }
 
     // Карточка раздела: заголовок, пояснение и его настройки (только подходящие под поиск)

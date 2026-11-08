@@ -105,7 +105,7 @@ namespace {
     std::wstring FindServer() {
         std::wstring dir = Text::ExecutableDirectory();
         for (int level = 0; level < 5; ++level) {
-            for (const wchar_t* sub : { L"\\llama.cpp", L"\\third_party\\llama.cpp", L"\\zephiro4ka\\third_party\\llama.cpp" }) {
+            for (const wchar_t* sub : { L"\\llama.cpp", L"\\third_party\\llama.cpp", L"\\ASTRIX\\third_party\\llama.cpp" }) {
                 const std::wstring path = dir + sub + L"\\llama-server.exe";
                 if (FileExists(path)) return path;
             }

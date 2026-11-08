@@ -16,7 +16,7 @@ scenarios.json
 pult.json
 devprobe.txt
 imgui.ini
-zephiro4ka/imgui.ini
+ASTRIX/imgui.ini
 
 # большие файлы — скачиваются отдельно (см. README)
 models/
@@ -24,9 +24,9 @@ models/
 *.bin
 *.pt
 *.onnx
-zephiro4ka/third_party/silero/venv/
-zephiro4ka/third_party/llama.cpp/*.exe
-zephiro4ka/third_party/llama.cpp/*.dll
-zephiro4ka/third_party/onnxruntime/lib/
+ASTRIX/third_party/silero/venv/
+ASTRIX/third_party/llama.cpp/*.exe
+ASTRIX/third_party/llama.cpp/*.dll
+ASTRIX/third_party/onnxruntime/lib/
 dist/
 .claude/

@@ -16,7 +16,7 @@ namespace {
 
     // Модель распознавания — в папке models рядом с проектом (models/huggingface)
     std::wstring AsrCache() {
-        const std::wstring models = Sidecar::FindUpwards({ L"models\\silero\\v5_6_ru.pt", L"zephiro4ka\\models\\silero\\v5_6_ru.pt" });
+        const std::wstring models = Sidecar::FindUpwards({ L"models\\silero\\v5_6_ru.pt", L"ASTRIX\\models\\silero\\v5_6_ru.pt" });
         std::wstring dir = Text::ExecutableDirectory() + L"\\models";
         if (!models.empty()) { // …\models\silero\v5_6_ru.pt → …\models
             dir = models.substr(0, models.find_last_of(L"\\/"));
@@ -37,9 +37,9 @@ namespace {
     }
 
     void StartBlocking() {
-        const std::wstring python = Sidecar::FindUpwards({ L"third_party\\silero\\venv\\Scripts\\python.exe", L"zephiro4ka\\third_party\\silero\\venv\\Scripts\\python.exe" });
-        const std::wstring script = Sidecar::FindUpwards({ L"third_party\\silero\\silero_server.py", L"zephiro4ka\\third_party\\silero\\silero_server.py" });
-        const std::wstring model = Sidecar::FindUpwards({ L"models\\silero\\v5_6_ru.pt", L"zephiro4ka\\models\\silero\\v5_6_ru.pt" });
+        const std::wstring python = Sidecar::FindUpwards({ L"third_party\\silero\\venv\\Scripts\\python.exe", L"ASTRIX\\third_party\\silero\\venv\\Scripts\\python.exe" });
+        const std::wstring script = Sidecar::FindUpwards({ L"third_party\\silero\\silero_server.py", L"ASTRIX\\third_party\\silero\\silero_server.py" });
+        const std::wstring model = Sidecar::FindUpwards({ L"models\\silero\\v5_6_ru.pt", L"ASTRIX\\models\\silero\\v5_6_ru.pt" });
         if (python.empty() || script.empty() || model.empty()) {
             Log::Write("Silero: не найден Python, сервер или модель — голос Silero недоступен");
             return;

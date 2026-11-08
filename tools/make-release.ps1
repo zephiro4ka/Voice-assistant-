@@ -5,7 +5,7 @@
 param([switch]$WithModels, [switch]$NoBuild, [switch]$Installer)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $root 'zephiro4ka'
+$project = Join-Path $root 'ASTRIX'
 $release = Join-Path $project 'x64\Release'
 $dist = Join-Path $root 'dist\ASTRIX'
 

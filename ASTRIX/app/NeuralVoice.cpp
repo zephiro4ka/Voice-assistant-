@@ -34,7 +34,7 @@ namespace {
     std::wstring FindModelDir() {
         std::wstring dir = Text::ExecutableDirectory();
         for (int level = 0; level < 5; ++level) {
-            for (const wchar_t* sub : { L"\\models\\supertonic-3", L"\\zephiro4ka\\models\\supertonic-3" }) {
+            for (const wchar_t* sub : { L"\\models\\supertonic-3", L"\\ASTRIX\\models\\supertonic-3" }) {
                 const std::wstring candidate = dir + sub;
                 if (GetFileAttributesW((candidate + L"\\onnx\\tts.json").c_str()) != INVALID_FILE_ATTRIBUTES) return candidate;
             }

@@ -53,7 +53,7 @@ namespace {
 
     std::wstring FindModelFile() {
         static const wchar_t* kNames[] = { L"ggml-small.bin", L"ggml-small-q5_1.bin", L"ggml-base.bin", L"ggml-medium.bin", L"ggml-tiny.bin" };
-        static const wchar_t* kSubdirs[] = { L"", L"\\models", L"\\zephiro4ka\\models" };
+        static const wchar_t* kSubdirs[] = { L"", L"\\models", L"\\ASTRIX\\models" };
         std::wstring dir = Text::ExecutableDirectory();
         for (int level = 0; level < 4; ++level) {
             for (const wchar_t* sub : kSubdirs) {
